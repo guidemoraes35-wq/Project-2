@@ -13,6 +13,7 @@ mais duendes aparecem. No fim dela, numa clareira com pedras antigas, espera o
 | --- | --- | --- |
 | Mover | Joystick no canto inferior esquerdo (360°) | WASD / setas |
 | Atacar | Botão no canto inferior direito (segure para atacar sem parar) | Espaço ou J |
+| SUPER | Botão menor acima e à direita do botão de ataque | K |
 | Girar a câmera | Arrastar o dedo em qualquer região sem botões | Arrastar o mouse, ou Q / E |
 
 O ataque tem mira automática: o avatar se vira para o duende mais próximo ao atacar.
@@ -54,6 +55,18 @@ node tools/build-single-html.mjs
 Cada ataque usa um atributo, e 1 ponto de Poder ou de Inteligência vale 1 ponto de ataque.
 Hoje o Assassino ataca com o Poder, a Maga com a Inteligência e os duendes (inclusive as
 flechas do arqueiro) com o Poder.
+
+## SUPER
+
+Todo avatar e o Chefão têm um SUPER (entre os duendes comuns, nenhum tem ainda).
+
+- **Maga — Bola de Fogo 🔥:** persegue o inimigo mais próximo e ataca com o dobro da
+  Inteligência (80 pontos de ataque, passando pela fórmula da defesa). Depois queima o
+  inimigo: 3 de vida por segundo durante 5 segundos. Carrega a cada 15 inimigos derrotados.
+- **Assassino — Invisibilidade 👻:** fica invisível para todos os inimigos por 2 segundos;
+  eles param de perseguir e de atacar. Pode ser usada a cada 10 segundos.
+- **Chefão — Arremesso de Pedra:** a cada 8 a 10 ataques, arranca uma pedra do chão e a
+  arremessa no jogador, causando 80 de dano. Um círculo no chão mostra onde ela vai cair.
 
 **Regeneração:** depois de 5 segundos sem tomar dano, todos os personagens recuperam 3% da
 vida máxima por segundo, arredondado para cima (Assassino 3, Maga 5, Duende 2, Arqueiro 3,

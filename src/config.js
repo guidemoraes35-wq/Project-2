@@ -21,6 +21,14 @@ export const CLASSES = {
       arco: Math.PI * 0.62,
       mira: 4.5,       // distância da mira automática
     },
+    super: {
+      tipo: 'invisibilidade',
+      nome: 'Invisibilidade',
+      icone: '👻',
+      descricao: 'Fica invisível para todos os inimigos por 2 s. Recarrega em 10 s.',
+      duracao: 2,
+      recarga: 10,
+    },
   },
   maga: {
     id: 'maga',
@@ -41,6 +49,18 @@ export const CLASSES = {
       alcance: 20,
       velocidadeProjetil: 17,
       mira: 18,
+    },
+    super: {
+      tipo: 'bolaDeFogo',
+      nome: 'Bola de Fogo',
+      icone: '🔥',
+      descricao: 'Persegue um inimigo, causa o dobro do ataque e queima 3 de vida/s por 5 s. Carrega a cada 15 inimigos derrotados.',
+      abatesNecessarios: 15,
+      multiplicador: 2,     // o ataque da bola de fogo é 2x a Inteligência
+      queimaDano: 3,        // vida perdida por segundo enquanto queima
+      queimaDuracao: 5,
+      velocidade: 13,
+      busca: 35,            // distância máxima para escolher o alvo
     },
   },
 };
@@ -100,6 +120,19 @@ export const CHEFAO = {
   empurrao: 0.12,
   interrompivel: false,
   alturaAcerto: 1.4,
+  super: {
+    tipo: 'pedra',
+    nome: 'Arremesso de Pedra',
+    atributo: 'poder',
+    dano: 80,
+    ataquesMin: 8,        // o super sai a cada 8 a 10 ataques do chefão
+    ataquesMax: 10,
+    alcance: 24,
+    duracao: 2.0,         // agachar, pegar a pedra, erguer e arremessar
+    pegar: 0.55,          // momento em que a pedra aparece na mão
+    lancamento: 1.35,     // momento em que a pedra é solta
+    raioImpacto: 1.9,
+  },
 };
 
 export const ATRIBUTOS = [

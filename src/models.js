@@ -46,6 +46,7 @@ function parte(geo, mat, op = {}) {
   m.castShadow = op.sombra !== false;
   if (op.contorno !== false) {
     const c = new THREE.Mesh(geo, matContorno);
+    c.userData.contorno = true;
     c.raycast = () => {};
     m.add(c);
   }
@@ -588,6 +589,10 @@ export function criarChefao() {
     }));
   }
   bd.mao.add(clava);
+  // pedra que ele arranca do chão no SUPER (escondida até ser usada)
+  rig.pedra = parte(new THREE.DodecahedronGeometry(0.42, 0), toon(0x6b6f78), { p: [0, -0.25, 0.1] });
+  rig.pedra.visible = false;
+  be.mao.add(rig.pedra);
   rig.bracoE = be.pivo;
   rig.bracoD = bd.pivo;
   corpo.add(rig.bracoE, rig.bracoD);
@@ -672,6 +677,17 @@ export function animarRig(rig, dt, t, andar, ataque = -1) {
     rig.bracoD.rotation.z = 0.55 * a;
     rig.corpo.rotation.y = -0.2 * a;
     rig.flechaArco.visible = p < soltar && p > 0.1;
+  } else if (rig.tipo === 'chefao' && rig.modo === 'pedra') {
+    // SUPER do chefão: agacha, arranca uma pedra do chão, ergue e arremessa
+    const ag = suave(Math.min(1, p / 0.25));               // agachar
+    const ergue = suave((p - 0.3) / 0.35);                  // erguer acima da cabeça
+    const joga = suave((p - 0.66) / 0.06);                  // arremessar
+    const volta = suave((p - 0.8) / 0.2);                   // voltar à postura
+    rig.corpo.rotation.x = (0.6 * ag - 0.8 * ergue + 0.55 * joga) * (1 - volta);
+    rig.corpo.position.y -= 0.25 * ag * (1 - ergue);
+    rig.bracoE.rotation.x = (-0.7 * ag - 2.4 * ergue + 2.2 * joga) * (1 - volta);
+    rig.bracoE.rotation.z = 0.3 - 0.25 * ergue;
+    rig.bracoD.rotation.x = 0.3 * ag * (1 - ergue);
   } else if (rig.tipo === 'chefao') {
     // chefão: ergue a clava com as duas mãos e esmaga o chão
     const sobe = Math.min(1, p / 0.68);

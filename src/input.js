@@ -2,7 +2,7 @@
 // e arrastar a tela para girar a câmera. Também aceita teclado/mouse no computador.
 
 export class Input {
-  constructor({ superficie, joystick, knob, botaoAtaque }) {
+  constructor({ superficie, joystick, knob, botaoAtaque, botaoSuper }) {
     this.joystick = joystick;
     this.knob = knob;
     this.joy = { x: 0, y: 0 };
@@ -11,7 +11,14 @@ export class Input {
     this.olharDX = 0;
     this.olharDY = 0;
     this.ataqueToque = false;
+    this.superPedido = false;
     this.teclas = new Set();
+
+    // --- Botão do SUPER (um toque = um uso) ---
+    botaoSuper.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.superPedido = true;
+    });
 
     // --- Joystick ---
     joystick.addEventListener('pointerdown', (e) => {
@@ -73,6 +80,7 @@ export class Input {
     window.addEventListener('keydown', (e) => {
       this.teclas.add(e.code);
       if (e.code === 'Space') e.preventDefault();
+      if (e.code === 'KeyK' && !e.repeat) this.superPedido = true;
     });
     window.addEventListener('keyup', (e) => this.teclas.delete(e.code));
     window.addEventListener('blur', () => this.teclas.clear());
@@ -134,6 +142,13 @@ export class Input {
     return this.ataqueToque || this.teclas.has('Space') || this.teclas.has('KeyJ');
   }
 
+  /** true uma vez para cada toque no botão do SUPER (ou tecla K). */
+  consumirSuper() {
+    const pedido = this.superPedido;
+    this.superPedido = false;
+    return pedido;
+  }
+
   /** Retorna quanto a câmera foi arrastada desde a última chamada. */
   consumirOlhar(dt) {
     let dx = this.olharDX;
@@ -150,6 +165,7 @@ export class Input {
     this.joy.y = 0;
     this.joyId = null;
     this.ataqueToque = false;
+    this.superPedido = false;
     this.olharIds.clear();
     this.olharDX = 0;
     this.olharDY = 0;

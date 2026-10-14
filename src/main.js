@@ -34,6 +34,7 @@ const input = new Input({
   joystick: $('joystick'),
   knob: $('joystick-knob'),
   botaoAtaque: $('attack-btn'),
+  botaoSuper: $('super-btn'),
 });
 
 function redimensionar() {
@@ -53,6 +54,8 @@ let jogador = null;
 let duendes = [];
 let projeteis = [];
 let flechas = [];
+let bolasDeFogo = [];
+let pedras = [];
 let rastro = null;
 let mortos = 0;
 let filaInimigos = []; // duendes planejados ao longo da trilha, ordenados pela posição
@@ -114,6 +117,7 @@ function montarCartas() {
       <div class="card-topo"><span class="card-icone">${cls.icone}</span><h2>${cls.nome}</h2></div>
       <p class="card-desc">${cls.descricao}</p>
       <p class="card-ataque">Ataque: <b>${NOMES_ATRIBUTO[cls.ataque.atributo]}</b> (${cls[cls.ataque.atributo]} pontos)</p>
+      <p class="card-super">SUPER: <b>${cls.super.icone} ${cls.super.nome}</b><span class="card-super-desc"> — ${cls.super.descricao}</span></p>
       <div class="stats">${barras}</div>`;
     carta.addEventListener('click', () => selecionarClasse(cls.id));
     cont.appendChild(carta);
@@ -149,7 +153,11 @@ function limparPartida() {
   for (const d of duendes) removerDuende(d);
   for (const p of projeteis) scene.remove(p.malha);
   for (const f of flechas) scene.remove(f.malha);
+  for (const b of bolasDeFogo) scene.remove(b.malha);
+  for (const p of pedras) scene.remove(p.malha, p.aviso);
   flechas = [];
+  bolasDeFogo = [];
+  pedras = [];
   if (rastro) rastro.remover(scene);
   jogador = null;
   chefao = null;
@@ -182,11 +190,16 @@ function iniciarJogo(id) {
     invul: 0,
     semDano: 0,
     regenT: 0,
+    superRecarga: 0,  // assassino: segundos até poder ficar invisível de novo
+    invisivel: 0,     // assassino: segundos restantes de invisibilidade
+    abatesSuper: 0,   // maga: inimigos derrotados desde o último SUPER
     vivo: true,
     mortoT: 0,
     raio: 0.4,
   };
   rig.root.rotation.y = jogador.dir;
+  if (cls.super.tipo === 'invisibilidade') prepararTransparencia(rig);
+  $('super-icon').textContent = cls.super.icone;
   if (cls.ataque.tipo === 'fisico') rastro = new RastroGolpe(scene, cls.ataque.arco);
 
   mortos = 0;
@@ -311,6 +324,11 @@ function criarInimigo(cfg, rig, x, z) {
     flash: 0,
     semDano: 0,
     regenT: 0,
+    queima: 0,       // segundos de queimadura restantes
+    queimaT: 0,
+    superT: -1,      // chefão: progresso do SUPER (-1 = parado)
+    ataquesFeitos: 0,
+    proximoSuper: cfg.super ? Math.floor(aleatorio(cfg.super.ataquesMin, cfg.super.ataquesMax + 1)) : Infinity,
     empurrao: new THREE.Vector3(),
     desvio: cfg === CHEFAO ? 0 : aleatorio(-0.6, 0.6),
     morto: false,
@@ -370,20 +388,23 @@ function removerDuende(d) {
   d.rig.pele.dispose();
 }
 
-function danoDuende(d, dano, origem) {
+/** op: { empurra, interrompe } (padrão true) e `classe` do número de dano. */
+function danoDuende(d, dano, origem, op = {}) {
   if (d.morto) return;
   d.hp -= dano;
   d.flash = 0.15;
-  tmp.subVectors(d.pos, origem).setY(0).normalize().multiplyScalar(7 * d.cfg.empurrao);
-  d.empurrao.copy(tmp);
-  if (d.cfg.interrompivel) {
+  if (op.empurra !== false) {
+    tmp.subVectors(d.pos, origem).setY(0).normalize().multiplyScalar(7 * d.cfg.empurrao);
+    d.empurrao.copy(tmp);
+  }
+  if (d.cfg.interrompivel && op.interrompe !== false) {
     d.ataqueT = -1; // interrompe o ataque
     d.recarga = Math.max(d.recarga, 0.5);
   }
   tmp.copy(d.pos).setY(d.cfg.alturaAcerto + 0.5);
-  numeros.mostrar(tmp, dano, 'inimigo');
+  numeros.mostrar(tmp, dano, op.classe || 'inimigo');
   if (d === chefao) atualizarHUD();
-  particulas.emitir(tmp, 0xff4433, 14, { vel: 4, vida: 0.5, gravidade: 9 });
+  if (op.empurra !== false) particulas.emitir(tmp, 0xff4433, 14, { vel: 4, vida: 0.5, gravidade: 9 });
   d.semDano = 0;
   d.regenT = 0;
   if (d.hp <= 0) {
@@ -398,6 +419,9 @@ function danoDuende(d, dano, origem) {
       return;
     }
     mortos++;
+    if (jogador.cls.super.abatesNecessarios) {
+      jogador.abatesSuper = Math.min(jogador.cls.super.abatesNecessarios, jogador.abatesSuper + 1);
+    }
     particulas.emitir(tmp, 0x8cff6a, 30, { vel: 3.5, vida: 1, subir: 1 });
     atualizarHUD();
   }
@@ -431,18 +455,21 @@ function atualizarDuendes(dt, t) {
     }
 
     const cfg = d.cfg;
+    const visivel = jogadorVisivel();
     const dist = distXZ(d.pos, jogador.pos);
     const alvoAng = Math.atan2(jogador.pos.x - d.pos.x, jogador.pos.z - d.pos.z);
     let movendo = 0;
     d.recarga -= dt;
 
-    if (cfg.distancia) {
+    if (d.superT >= 0) {
+      atualizarSuperChefao(d, dt);
+    } else if (cfg.distancia) {
       movendo = comportamentoArqueiro(d, dt, dist, alvoAng);
     } else if (d.ataqueT >= 0) {
       d.ataqueT += dt;
       if (!d.acertou && d.ataqueT >= cfg.preparo) {
         d.acertou = true;
-        if (jogador.vivo && dist < cfg.alcance + 0.35) {
+        if (visivel && dist < cfg.alcance + 0.35) {
           danoJogador(calcularDano(pontosDeAtaque(cfg, cfg.atributoAtaque), jogador.cls.defesa), d.pos);
         }
         if (d === chefao) {
@@ -453,11 +480,18 @@ function atualizarDuendes(dt, t) {
         }
       }
       if (d.ataqueT >= cfg.duracaoAtaque) d.ataqueT = -1;
-    } else if (jogador.vivo && dist < cfg.alcance && d.recarga <= 0) {
+    } else if (visivel && cfg.super && d.recarga <= 0 && d.ataquesFeitos >= d.proximoSuper && dist < cfg.super.alcance) {
+      // SUPER do chefão: arremesso de pedra
+      d.superT = 0;
+      d.acertou = false;
+      d.ataquesFeitos = 0;
+      d.proximoSuper = Math.floor(aleatorio(cfg.super.ataquesMin, cfg.super.ataquesMax + 1));
+    } else if (visivel && dist < cfg.alcance && d.recarga <= 0) {
       d.ataqueT = 0;
       d.acertou = false;
+      d.ataquesFeitos++;
       d.recarga = cfg.recarga + aleatorio(0, 0.5);
-    } else if (jogador.vivo && dist > cfg.alcance * 0.8) {
+    } else if (visivel && dist > cfg.alcance * 0.8) {
       // persegue o jogador, com um pequeno desvio para cercá-lo
       const ang = alvoAng + d.desvio * Math.min(1, dist / 10);
       d.pos.x += Math.sin(ang) * d.velocidade * dt;
@@ -465,7 +499,8 @@ function atualizarDuendes(dt, t) {
       movendo = 1;
     }
     // o chefão não consegue se virar enquanto desce a clava
-    if (!(d === chefao && d.ataqueT >= 0)) d.dir = girarPara(d.dir, alvoAng, dt * (d === chefao ? 4 : 10));
+    const travado = d === chefao && (d.ataqueT >= 0 || d.superT >= CHEFAO.super.lancamento);
+    if (visivel && !travado) d.dir = girarPara(d.dir, alvoAng, dt * (d === chefao ? 4 : 10));
 
     // empurrão ao ser atingido
     d.pos.addScaledVector(d.empurrao, dt);
@@ -493,8 +528,10 @@ function atualizarDuendes(dt, t) {
 
     d.andar += (movendo - d.andar) * Math.min(1, dt * 10);
     rig.root.rotation.y = d.dir;
-    const prog = d.ataqueT >= 0 ? d.ataqueT / cfg.duracaoAtaque : -1;
+    rig.modo = d.superT >= 0 ? 'pedra' : null;
+    const prog = d.superT >= 0 ? d.superT / cfg.super.duracao : d.ataqueT >= 0 ? d.ataqueT / cfg.duracaoAtaque : -1;
     animarRig(rig, dt, t, d.andar, prog);
+    if (rig.pedra) rig.pedra.visible = d.superT >= cfg.super.pegar && d.superT < cfg.super.lancamento;
 
     regenerar(d, dt);
 
@@ -510,6 +547,7 @@ function atualizarDuendes(dt, t) {
     d.barra.position.set(d.pos.x, 1.65, d.pos.z);
     d.barra.quaternion.copy(camera.quaternion);
     d.fill.scale.x = Math.max(0.001, d.hp / d.hpMax);
+    queimar(d, dt);
   }
 }
 
@@ -521,12 +559,12 @@ function comportamentoArqueiro(d, dt, dist, alvoAng) {
     d.ataqueT += dt;
     if (!d.acertou && d.ataqueT >= cfg.preparo) {
       d.acertou = true;
-      if (jogador.vivo) dispararFlecha(d);
+      if (jogadorVisivel()) dispararFlecha(d);
     }
     if (d.ataqueT >= cfg.duracaoAtaque) d.ataqueT = -1;
     return 0;
   }
-  if (!jogador.vivo) return 0;
+  if (!jogadorVisivel()) return 0;
   if (dist <= cfg.alcance && d.recarga <= 0) {
     d.ataqueT = 0;
     d.acertou = false;
@@ -595,6 +633,228 @@ function atualizarFlechas(dt) {
     if (fim) {
       scene.remove(f.malha);
       flechas.splice(i, 1);
+    }
+  }
+}
+
+// ------------------------------------------------------------------ SUPER
+/** Os inimigos só enxergam o jogador vivo e fora da invisibilidade. */
+const jogadorVisivel = () => jogador.vivo && jogador.invisivel <= 0;
+
+function usarSuper() {
+  const sup = jogador.cls.super;
+  let usou = false;
+  if (sup.tipo === 'bolaDeFogo' && jogador.abatesSuper >= sup.abatesNecessarios) {
+    jogador.abatesSuper = 0;
+    lancarBolaDeFogo();
+    usou = true;
+  } else if (sup.tipo === 'invisibilidade' && jogador.superRecarga <= 0) {
+    jogador.invisivel = sup.duracao;
+    jogador.superRecarga = sup.recarga;
+    tmp.copy(jogador.pos).setY(1);
+    particulas.emitir(tmp, 0x9fb4ff, 40, { vel: 3, vida: 0.7, subir: 0.5 });
+    // os inimigos perdem o alvo: ataques em preparação são cancelados
+    for (const d of duendes) if (d.ataqueT >= 0 && !d.acertou) d.ataqueT = -1;
+    usou = true;
+  }
+  if (!usou) {
+    const b = $('super-btn');
+    b.classList.remove('negado');
+    void b.offsetWidth;
+    b.classList.add('negado');
+  }
+}
+
+function atualizarBotaoSuper() {
+  const sup = jogador.cls.super;
+  const b = $('super-btn');
+  let carga, rotulo;
+  if (sup.tipo === 'bolaDeFogo') {
+    carga = jogador.abatesSuper / sup.abatesNecessarios;
+    rotulo = carga >= 1 ? 'SUPER' : `${jogador.abatesSuper}/${sup.abatesNecessarios}`;
+  } else {
+    carga = 1 - Math.max(0, jogador.superRecarga) / sup.recarga;
+    rotulo = jogador.invisivel > 0 ? 'ATIVO' : carga >= 1 ? 'SUPER' : `${Math.ceil(jogador.superRecarga)}s`;
+  }
+  b.style.setProperty('--carga', Math.min(1, carga).toFixed(3));
+  b.classList.toggle('pronto', carga >= 1 && jogador.invisivel <= 0);
+  b.classList.toggle('ativo', jogador.invisivel > 0);
+  const el = $('super-label');
+  if (el.textContent !== rotulo) el.textContent = rotulo;
+}
+
+// Invisibilidade: o assassino recebe materiais próprios para poder ficar translúcido
+function prepararTransparencia(rig) {
+  rig.root.traverse((o) => {
+    if (o.isMesh && !o.userData.contorno) o.material = o.material.clone();
+  });
+}
+function definirOpacidade(rig, a) {
+  rig.root.traverse((o) => {
+    if (!o.isMesh) return;
+    if (o.userData.contorno) {
+      o.visible = a >= 1;
+      return;
+    }
+    o.material.transparent = a < 1;
+    o.material.opacity = a;
+    o.material.depthWrite = a >= 1;
+  });
+}
+
+const geoBolaFogo = new THREE.SphereGeometry(0.28, 14, 12);
+const matBolaFogo = new THREE.MeshBasicMaterial({ color: 0xffd27a });
+const matBrilhoFogo = new THREE.SpriteMaterial({
+  map: texturaBrilho('rgba(255,120,30,1)'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true,
+});
+
+function inimigoMaisProximoDe(pos, maxDist) {
+  let melhor = null, md = maxDist;
+  for (const d of duendes) {
+    if (d.morto) continue;
+    const dd = distXZ(d.pos, pos);
+    if (dd < md) {
+      md = dd;
+      melhor = d;
+    }
+  }
+  return melhor;
+}
+
+function lancarBolaDeFogo() {
+  const sup = jogador.cls.super;
+  const alvo = inimigoMaisProximoDe(jogador.pos, sup.busca);
+  if (alvo) jogador.dir = Math.atan2(alvo.pos.x - jogador.pos.x, alvo.pos.z - jogador.pos.z);
+  // usa a animação do ataque normal, sem disparar o orbe comum
+  jogador.ataqueT = 0;
+  jogador.acertou = true;
+  jogador.recarga = jogador.cls.ataque.recarga;
+  const malha = new THREE.Mesh(geoBolaFogo, matBolaFogo);
+  const brilho = new THREE.Sprite(matBrilhoFogo);
+  brilho.scale.setScalar(2.6);
+  malha.add(brilho);
+  jogador.rig.orbe.getWorldPosition(malha.position);
+  malha.position.y += 0.3;
+  scene.add(malha);
+  const vel = new THREE.Vector3(Math.sin(jogador.dir), 0.25, Math.cos(jogador.dir)).normalize().multiplyScalar(sup.velocidade);
+  bolasDeFogo.push({ malha, vel, alvo, vida: 6 });
+  particulas.emitir(malha.position, 0xff8a2a, 40, { vel: 4, vida: 0.6 });
+  tremor = Math.max(tremor, 0.15);
+}
+
+function atualizarBolasDeFogo(dt, t) {
+  const sup = CLASSES.maga.super;
+  for (let i = bolasDeFogo.length - 1; i >= 0; i--) {
+    const b = bolasDeFogo[i];
+    b.vida -= dt;
+    // se o alvo morreu, procura outro
+    if (!b.alvo || b.alvo.morto) b.alvo = inimigoMaisProximoDe(b.malha.position, sup.busca);
+    if (b.alvo) {
+      tmp.set(b.alvo.pos.x, b.alvo.cfg.alturaAcerto, b.alvo.pos.z).sub(b.malha.position).normalize().multiplyScalar(sup.velocidade);
+      b.vel.lerp(tmp, Math.min(1, dt * 5));
+    }
+    b.malha.position.addScaledVector(b.vel, dt);
+    b.malha.children[0].scale.setScalar(2.4 + Math.sin(t * 30) * 0.3);
+    particulas.emitir(b.malha.position, Math.random() < 0.5 ? 0xff6a1a : 0xffc04a, 4, { vel: 1.2, vida: 0.45, subir: 1 });
+    let acabou = b.vida <= 0;
+    if (b.alvo) {
+      tmp2.set(b.alvo.pos.x, b.alvo.cfg.alturaAcerto, b.alvo.pos.z);
+      if (tmp2.distanceTo(b.malha.position) < b.alvo.raio + 0.45) {
+        const ataque = pontosDeAtaque(jogador.cls, jogador.cls.ataque.atributo) * sup.multiplicador;
+        const alvo = b.alvo;
+        danoDuende(alvo, calcularDano(ataque, alvo.cfg.defesa), b.malha.position);
+        if (!alvo.morto) {
+          alvo.queima = sup.queimaDuracao;
+          alvo.queimaT = 0;
+        }
+        acabou = true;
+      }
+    }
+    if (acabou) {
+      particulas.emitir(b.malha.position, 0xff7a20, 60, { vel: 6, vida: 0.8, subir: 1 });
+      particulas.emitir(b.malha.position, 0xffe08a, 25, { vel: 3, vida: 0.5 });
+      scene.remove(b.malha);
+      bolasDeFogo.splice(i, 1);
+    }
+  }
+}
+
+/** Queimadura: 3 de vida por segundo, ignora a defesa. */
+function queimar(d, dt) {
+  if (d.queima <= 0 || d.morto) return;
+  if (Math.random() < 0.6) {
+    tmp.set(d.pos.x + aleatorio(-0.3, 0.3), aleatorio(0.3, d.cfg.alturaAcerto + 0.6), d.pos.z + aleatorio(-0.3, 0.3));
+    particulas.emitir(tmp, Math.random() < 0.5 ? 0xff5a10 : 0xffb030, 1, { vel: 0.5, vida: 0.6, subir: 1.6 });
+  }
+  d.queimaT += dt;
+  while (d.queimaT >= 1 && d.queima > 0 && !d.morto) {
+    d.queimaT -= 1;
+    d.queima -= 1;
+    danoDuende(d, CLASSES.maga.super.queimaDano, d.pos, { empurra: false, interrompe: false, classe: 'queima' });
+  }
+}
+
+// SUPER do chefão: pega uma pedra do chão e arremessa no jogador
+const geoPedraArremesso = new THREE.DodecahedronGeometry(0.47, 0);
+const matPedraArremesso = new THREE.MeshStandardMaterial({ color: 0x6b6f78, roughness: 0.9, flatShading: true });
+
+function atualizarSuperChefao(d, dt) {
+  const sup = d.cfg.super;
+  const antes = d.superT;
+  d.superT += dt;
+  if (antes < sup.pegar && d.superT >= sup.pegar) {
+    // arranca a pedra do chão
+    tmp.set(d.pos.x + Math.sin(d.dir) * 1.0, 0.2, d.pos.z + Math.cos(d.dir) * 1.0);
+    particulas.emitir(tmp, 0x8a7458, 30, { vel: 3, vida: 0.7, gravidade: 8, subir: 2 });
+  }
+  if (antes < sup.lancamento && d.superT >= sup.lancamento) arremessarPedra(d);
+  if (d.superT >= sup.duracao) {
+    d.superT = -1;
+    d.recarga = 1.2;
+  }
+}
+
+function arremessarPedra(d) {
+  const sup = d.cfg.super;
+  const malha = new THREE.Mesh(geoPedraArremesso, matPedraArremesso);
+  malha.castShadow = true;
+  d.rig.pedra.getWorldPosition(malha.position);
+  // mira onde o jogador está agora; um círculo no chão mostra onde a pedra vai cair
+  const alvo = new THREE.Vector3(jogador.pos.x, 0, jogador.pos.z);
+  const voo = THREE.MathUtils.clamp(distXZ(malha.position, alvo) / 13, 0.7, 1.4);
+  const g = 22;
+  const vel = new THREE.Vector3(
+    (alvo.x - malha.position.x) / voo,
+    (alvo.y - malha.position.y) / voo + 0.5 * g * voo,
+    (alvo.z - malha.position.z) / voo
+  );
+  const aviso = new THREE.Mesh(
+    new THREE.RingGeometry(sup.raioImpacto - 0.25, sup.raioImpacto, 36).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0xff4a1a, transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending })
+  );
+  aviso.position.set(alvo.x, 0.04, alvo.z);
+  scene.add(malha, aviso);
+  pedras.push({ malha, vel, g, alvo, aviso, t: 0, voo, dano: sup.dano, raio: sup.raioImpacto });
+}
+
+function atualizarPedras(dt) {
+  for (let i = pedras.length - 1; i >= 0; i--) {
+    const p = pedras[i];
+    p.t += dt;
+    p.vel.y -= p.g * dt;
+    p.malha.position.addScaledVector(p.vel, dt);
+    p.malha.rotation.x += dt * 6;
+    p.malha.rotation.z += dt * 4;
+    p.aviso.material.opacity = 0.35 + 0.35 * Math.sin(p.t * 20);
+    if (p.t >= p.voo) {
+      tmp.copy(p.alvo).setY(0.3);
+      particulas.emitir(tmp, 0x9a8466, 60, { vel: 7, vida: 0.9, gravidade: 10, subir: 3 });
+      tremor = Math.max(tremor, 0.45);
+      if (jogador.vivo && distXZ(jogador.pos, p.alvo) < p.raio + jogador.raio) danoJogador(p.dano, p.alvo);
+      scene.remove(p.malha, p.aviso);
+      p.aviso.geometry.dispose();
+      p.aviso.material.dispose();
+      pedras.splice(i, 1);
     }
   }
 }
@@ -741,6 +1001,13 @@ function atualizarJogador(dt, t) {
   const rig = j.rig;
   j.invul = Math.max(0, j.invul - dt);
   j.recarga -= dt;
+  j.superRecarga = Math.max(0, j.superRecarga - dt);
+  if (j.invisivel > 0) {
+    j.invisivel = Math.max(0, j.invisivel - dt);
+    definirOpacidade(rig, j.invisivel > 0 ? 0.22 + Math.sin(t * 12) * 0.06 : 1);
+  }
+  if (estado === 'jogando' && j.vivo && input.consumirSuper()) usarSuper();
+  atualizarBotaoSuper();
 
   if (j.vivo) regenerar(j, dt);
   if (!j.vivo) {
@@ -854,6 +1121,8 @@ function loop() {
     atualizarDuendes(dt, tempo);
     atualizarProjeteis(dt);
     atualizarFlechas(dt);
+    atualizarBolasDeFogo(dt, tempo);
+    atualizarPedras(dt);
     if (rastro) rastro.atualizar(dt);
     mundo.atualizar(dt, tempo, jogador.pos, camera);
     luzJogador.position.set(jogador.pos.x, 3, jogador.pos.z);

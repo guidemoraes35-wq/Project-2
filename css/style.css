@@ -242,6 +242,42 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 #attack-btn span { position: relative; filter: drop-shadow(0 2px 2px #000); }
 #attack-btn.ativo { transform: scale(0.93); filter: brightness(1.25); }
+#super-btn {
+  /* no canto superior direito do botão de ataque */
+  --carga: 0;
+  position: absolute;
+  right: calc(12px + var(--sad));
+  bottom: calc(126px + var(--sab));
+  width: 66px;
+  height: 66px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #6a5a3a;
+  background:
+    radial-gradient(circle at 40% 35%, #3a2f52, #1a1426 70%) padding-box,
+    conic-gradient(var(--ouro) calc(var(--carga) * 360deg), rgba(255,255,255,0.08) 0) border-box;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+  pointer-events: auto;
+  touch-action: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  filter: grayscale(0.7) brightness(0.8);
+}
+#super-btn #super-icon { font-size: 26px; line-height: 1; }
+.super-rotulo { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: var(--ouro); }
+#super-btn.pronto {
+  border-color: var(--ouro);
+  filter: none;
+  animation: super-pronto 1s ease-in-out infinite alternate;
+}
+#super-btn.ativo { filter: none; border-color: #9fd8ff; }
+#super-btn.negado { animation: negado 0.3s; }
+@keyframes super-pronto { to { box-shadow: 0 0 18px 4px rgba(232, 194, 106, 0.65); } }
+@keyframes negado { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+
 #attack-cd {
   position: absolute;
   inset: 0;
@@ -265,6 +301,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .dano.inimigo { color: #ffe27a; }
 .dano.jogador { color: #ff4a3a; font-size: 26px; }
 .dano.cura { color: #7dff8f; font-size: 18px; }
+.dano.queima { color: #ff9a3a; font-size: 16px; }
 
 #hurt-vignette {
   position: fixed;
@@ -326,6 +363,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .card-desc { margin: 6px 0 10px; font-size: 13px; color: var(--texto-suave); line-height: 1.35; }
 .card-ataque { margin: 0 0 8px; font-size: 12px; color: var(--texto-suave); }
 .card-ataque b { color: var(--ouro); }
+.card-super { margin: -4px 0 8px; font-size: 12px; color: var(--texto-suave); line-height: 1.35; }
+.card-super b { color: #ffb36a; }
 .stats { display: grid; gap: 5px; }
 .stat { display: grid; grid-template-columns: 82px 1fr 30px; align-items: center; gap: 8px; font-size: 12px; }
 .stat-nome { color: var(--texto-suave); }
@@ -370,7 +409,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 @media (max-width: 560px) {
   .cartas { gap: 8px; }
   .card { padding: 10px; }
-  .card-desc { display: none; }
+  .card-desc, .card-super-desc { display: none; }
   .card h2 { font-size: 18px; }
   .stat { grid-template-columns: 1fr 30px; gap: 2px 6px; font-size: 11px; }
   .stat-barra { grid-column: 1 / -1; grid-row: 2; }
@@ -378,6 +417,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
   #joystick { width: 120px; height: 120px; left: calc(20px + var(--sae)); bottom: calc(24px + var(--sab)); }
   #joystick-knob { width: 54px; height: 54px; }
   #attack-btn { width: 92px; height: 92px; right: calc(22px + var(--sad)); bottom: calc(32px + var(--sab)); font-size: 34px; }
+  #super-btn { width: 58px; height: 58px; right: calc(6px + var(--sad)); bottom: calc(108px + var(--sab)); }
+  #super-btn #super-icon { font-size: 22px; }
   .teclado { display: none; }
 }
 
@@ -386,7 +427,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .tela header p { display: none; }
   .tela h1 { font-size: 28px; }
   .espaco { min-height: 40px; }
-  .card-desc { display: none; }
+  .card-desc, .card-super-desc { display: none; }
   .stats { gap: 3px; }
   .botao-principal { margin-top: 8px; padding: 10px 22px; }
   .teclado { display: none; }
