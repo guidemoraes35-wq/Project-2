@@ -24,7 +24,7 @@ export const CLASSES = {
     super: {
       tipo: 'invisibilidade',
       nome: 'Invisibilidade',
-      icone: '👻',
+      icone: 'capa', // desenhado em SVG: uma capa de mago translúcida
       descricao: 'Fica invisível para todos os inimigos por 2 s. Recarrega em 10 s.',
       duracao: 2,
       recarga: 10,

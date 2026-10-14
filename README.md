@@ -9,6 +9,8 @@ mais duendes aparecem. No fim dela, numa clareira com pedras antigas, espera o
 
 ## Como jogar
 
+O jogo abre numa tela escura com o botão **Iniciar Tutorial**; ao tocar nele, vem a escolha do avatar.
+
 | Ação | Celular | Computador |
 | --- | --- | --- |
 | Mover | Joystick no canto inferior esquerdo (360°) | WASD / setas |
@@ -63,8 +65,9 @@ Todo avatar e o Chefão têm um SUPER (entre os duendes comuns, nenhum tem ainda
 - **Maga — Bola de Fogo 🔥:** persegue o inimigo mais próximo e ataca com o dobro da
   Inteligência (80 pontos de ataque, passando pela fórmula da defesa). Depois queima o
   inimigo: 3 de vida por segundo durante 5 segundos. Carrega a cada 15 inimigos derrotados.
-- **Assassino — Invisibilidade 👻:** fica invisível para todos os inimigos por 2 segundos;
-  eles param de perseguir e de atacar. Pode ser usada a cada 10 segundos.
+- **Assassino — Invisibilidade (ícone de capa de mago translúcida):** fica invisível para todos
+  os inimigos por 2 segundos; eles param de perseguir e de atacar. Para quem joga, ele vira um
+  vulto azul translúcido, ainda visível. Pode ser usada a cada 10 segundos.
 - **Chefão — Arremesso de Pedra:** a cada 8 a 10 ataques, arranca uma pedra do chão e a
   arremessa no jogador, causando 80 de dano. Um círculo no chão mostra onde ela vai cair.
 

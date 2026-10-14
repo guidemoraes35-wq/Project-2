@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { CLASSES, DUENDE, ARQUEIRO, CHEFAO, ATRIBUTOS, REGRAS, NOMES_ATRIBUTO, calcularDano, pontosDeAtaque, vidaPorSegundo } from './config.js';
 import { Input } from './input.js';
 import { criarMundo, texturaBrilho } from './world.js';
-import { criarAssassino, criarMaga, criarDuende, criarChefao, animarRig } from './models.js';
+import { criarAssassino, criarMaga, criarDuende, criarChefao, animarRig, criarContornoTranslucido } from './models.js';
 import { Particulas, RastroGolpe, NumerosDano } from './effects.js';
 
 // ------------------------------------------------------------------ Elementos
@@ -79,6 +79,24 @@ function difAngulo(a, b) {
 }
 const girarPara = (a, b, k) => a + difAngulo(a, b) * Math.min(1, k);
 
+// ------------------------------------------------------------------ Ícones do SUPER
+// Capa de mago translúcida (Invisibilidade do Assassino), desenhada em SVG
+const ICONE_CAPA = `<svg class="icone-capa" viewBox="0 0 64 64" aria-hidden="true">
+  <defs>
+    <linearGradient id="capa-g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#cfe2ff" stop-opacity="0.85"/>
+      <stop offset="0.6" stop-color="#8fb4ff" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#8fb4ff" stop-opacity="0.08"/>
+    </linearGradient>
+  </defs>
+  <path d="M32 5 C22 6 17 15 17 24 C17 30 14 38 9 47 C8 50 9 53 12 54 C18 56 23 52 27 55 C29 57 35 57 37 55 C41 52 46 56 52 54 C55 53 56 50 55 47 C50 38 47 30 47 24 C47 15 42 6 32 5 Z"
+    fill="url(#capa-g)" stroke="#e6f0ff" stroke-opacity="0.9" stroke-width="1.6" stroke-dasharray="3 2.2"/>
+  <path d="M32 13 C26 13 23 18 23 23 C23 27 26 30 32 30 C38 30 41 27 41 23 C41 18 38 13 32 13 Z" fill="#0d1226" fill-opacity="0.85"/>
+  <path d="M26 33 C28 41 27 48 24 53 M38 33 C36 41 37 48 40 53" fill="none" stroke="#e6f0ff" stroke-opacity="0.45" stroke-width="1.2"/>
+  <circle cx="13" cy="15" r="1.6" fill="#fff"/><circle cx="52" cy="11" r="1.2" fill="#fff"/><circle cx="55" cy="30" r="1" fill="#fff"/>
+</svg>`;
+const iconeSuper = (sup) => (sup.icone === 'capa' ? ICONE_CAPA : sup.icone);
+
 // ------------------------------------------------------------------ Tela de seleção
 const preview = { assassino: null, maga: null };
 
@@ -117,7 +135,7 @@ function montarCartas() {
       <div class="card-topo"><span class="card-icone">${cls.icone}</span><h2>${cls.nome}</h2></div>
       <p class="card-desc">${cls.descricao}</p>
       <p class="card-ataque">Ataque: <b>${NOMES_ATRIBUTO[cls.ataque.atributo]}</b> (${cls[cls.ataque.atributo]} pontos)</p>
-      <p class="card-super">SUPER: <b>${cls.super.icone} ${cls.super.nome}</b><span class="card-super-desc"> — ${cls.super.descricao}</span></p>
+      <p class="card-super">SUPER: <b>${iconeSuper(cls.super)} ${cls.super.nome}</b><span class="card-super-desc"> — ${cls.super.descricao}</span></p>
       <div class="stats">${barras}</div>`;
     carta.addEventListener('click', () => selecionarClasse(cls.id));
     cont.appendChild(carta);
@@ -199,7 +217,7 @@ function iniciarJogo(id) {
   };
   rig.root.rotation.y = jogador.dir;
   if (cls.super.tipo === 'invisibilidade') prepararTransparencia(rig);
-  $('super-icon').textContent = cls.super.icone;
+  $('super-icon').innerHTML = iconeSuper(cls.super);
   if (cls.ataque.tipo === 'fisico') rastro = new RastroGolpe(scene, cls.ataque.arco);
 
   mortos = 0;
@@ -683,22 +701,36 @@ function atualizarBotaoSuper() {
   if (el.textContent !== rotulo) el.textContent = rotulo;
 }
 
-// Invisibilidade: o assassino recebe materiais próprios para poder ficar translúcido
+// Invisibilidade: o assassino recebe materiais próprios para poder ficar translúcido.
+// Ele continua visível para o jogador, como um vulto azulado com contorno claro.
+const contornoTranslucido = criarContornoTranslucido();
 function prepararTransparencia(rig) {
-  rig.root.traverse((o) => {
-    if (o.isMesh && !o.userData.contorno) o.material = o.material.clone();
-  });
-}
-function definirOpacidade(rig, a) {
   rig.root.traverse((o) => {
     if (!o.isMesh) return;
     if (o.userData.contorno) {
-      o.visible = a >= 1;
+      o.userData.matOriginal = o.material;
       return;
     }
-    o.material.transparent = a < 1;
+    o.material = o.material.clone();
+    if (o.material.emissive) o.userData.emissivoOriginal = o.material.emissive.clone();
+  });
+}
+const brilhoInvisivel = new THREE.Color(0x2a4a8a);
+function definirOpacidade(rig, a) {
+  const translucido = a < 1;
+  contornoTranslucido.opacity = a * 0.9;
+  rig.root.traverse((o) => {
+    if (!o.isMesh) return;
+    if (o.userData.contorno) {
+      o.material = translucido ? contornoTranslucido : o.userData.matOriginal;
+      return;
+    }
+    o.material.transparent = translucido;
     o.material.opacity = a;
-    o.material.depthWrite = a >= 1;
+    o.material.depthWrite = !translucido;
+    if (o.userData.emissivoOriginal) {
+      o.material.emissive.copy(translucido ? brilhoInvisivel : o.userData.emissivoOriginal);
+    }
   });
 }
 
@@ -1004,7 +1036,7 @@ function atualizarJogador(dt, t) {
   j.superRecarga = Math.max(0, j.superRecarga - dt);
   if (j.invisivel > 0) {
     j.invisivel = Math.max(0, j.invisivel - dt);
-    definirOpacidade(rig, j.invisivel > 0 ? 0.22 + Math.sin(t * 12) * 0.06 : 1);
+    definirOpacidade(rig, j.invisivel > 0 ? 0.38 + Math.sin(t * 10) * 0.06 : 1);
   }
   if (estado === 'jogando' && j.vivo && input.consumirSuper()) usarSuper();
   atualizarBotaoSuper();
@@ -1137,6 +1169,13 @@ function loop() {
   numeros.atualizar(dt);
   renderer.render(scene, camera);
 }
+
+// ------------------------------------------------------------------ Tela inicial
+$('intro-btn').addEventListener('click', () => {
+  const intro = $('intro-screen');
+  intro.classList.add('saindo');
+  setTimeout(() => intro.classList.add('hidden'), 700);
+});
 
 montarCartas();
 mostrarSelecao();

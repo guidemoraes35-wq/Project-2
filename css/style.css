@@ -266,7 +266,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
   gap: 1px;
   filter: grayscale(0.7) brightness(0.8);
 }
-#super-btn #super-icon { font-size: 26px; line-height: 1; }
+#super-btn #super-icon { font-size: 26px; line-height: 1; display: flex; }
+.icone-capa { width: 1.25em; height: 1.25em; display: inline-block; vertical-align: -0.3em; }
+#super-btn.ativo .icone-capa { animation: capa-tremula 0.5s ease-in-out infinite alternate; }
+@keyframes capa-tremula { from { opacity: 0.45; transform: translateY(1px); } to { opacity: 1; transform: translateY(-1px); } }
 .super-rotulo { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: var(--ouro); }
 #super-btn.pronto {
   border-color: var(--ouro);
@@ -312,6 +315,69 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 #hurt-vignette.pisca { animation: vinheta 0.5s ease-out; }
 @keyframes vinheta { from { opacity: 1; } to { opacity: 0; } }
+
+/* ---------------------------------------------------------------- Tela inicial */
+.tela-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  padding: 16px;
+  background:
+    radial-gradient(circle at 50% 55%, rgba(232, 194, 106, 0.16) 0, rgba(232, 194, 106, 0.05) 22%, transparent 48%),
+    #030408;
+  transition: opacity 0.7s ease;
+}
+.tela-intro::before {
+  /* luz fraca do botão se espalhando pela tela */
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 55%;
+  width: min(140vw, 1100px);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(255, 214, 140, 0.1) 0, rgba(255, 214, 140, 0.03) 30%, transparent 60%);
+  animation: luz-intro 3.2s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@keyframes luz-intro { from { opacity: 0.55; } to { opacity: 1; } }
+.tela-intro.saindo { opacity: 0; pointer-events: none; }
+.intro-titulo {
+  position: relative;
+  margin: 0;
+  font-family: var(--fonte-titulo);
+  font-size: clamp(22px, 5vw, 36px);
+  letter-spacing: 0.12em;
+  color: rgba(232, 194, 106, 0.38);
+  text-align: center;
+}
+.botao-intro {
+  position: relative;
+  padding: 16px 36px;
+  font-family: var(--fonte-titulo);
+  font-size: 20px;
+  letter-spacing: 0.06em;
+  color: #f3dfae;
+  background: radial-gradient(ellipse at 50% 40%, rgba(70, 52, 22, 0.95), rgba(22, 16, 8, 0.95));
+  border: 1px solid rgba(232, 194, 106, 0.7);
+  border-radius: 12px;
+  text-shadow: 0 0 10px rgba(255, 200, 110, 0.7);
+  box-shadow: 0 0 18px 4px rgba(232, 194, 106, 0.28), 0 0 60px 18px rgba(232, 194, 106, 0.1), inset 0 0 14px rgba(255, 200, 110, 0.2);
+  animation: brilho-intro 3.2s ease-in-out infinite alternate;
+}
+.botao-intro:active { transform: scale(0.97); }
+.botao-intro:focus-visible { outline: 2px solid var(--ouro); outline-offset: 4px; }
+@keyframes brilho-intro {
+  to { box-shadow: 0 0 26px 7px rgba(232, 194, 106, 0.4), 0 0 90px 30px rgba(232, 194, 106, 0.14), inset 0 0 18px rgba(255, 200, 110, 0.3); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tela-intro::before, .botao-intro { animation: none; }
+}
 
 /* ---------------------------------------------------------------- Telas */
 .tela {

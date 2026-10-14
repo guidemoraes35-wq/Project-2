@@ -24,12 +24,20 @@ function toon(cor, extra = {}, unico = false) {
 
 // Contorno: a malha é desenhada de novo, por dentro, empurrada ao longo das normais.
 const matContorno = new THREE.MeshBasicMaterial({ color: 0x0a0a12, side: THREE.BackSide });
-matContorno.onBeforeCompile = (shader) => {
+const empurrarContorno = (shader) => {
   shader.vertexShader = shader.vertexShader.replace(
     '#include <begin_vertex>',
     '#include <begin_vertex>\n  transformed += normalize(normal) * 0.018;'
   );
 };
+matContorno.onBeforeCompile = empurrarContorno;
+
+/** Cópia do material de contorno que pode ficar translúcida (usada na invisibilidade). */
+export function criarContornoTranslucido() {
+  const m = new THREE.MeshBasicMaterial({ color: 0x9fc4ff, side: THREE.BackSide, transparent: true, depthWrite: false });
+  m.onBeforeCompile = empurrarContorno;
+  return m;
+}
 
 /**
  * Cria uma parte do corpo.
