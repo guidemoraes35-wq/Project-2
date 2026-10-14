@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CLASSES, DUENDE, CHEFAO, ATRIBUTOS, REGRAS, NOMES_ATRIBUTO, calcularDano, pontosDeAtaque } from './config.js';
+import { CLASSES, DUENDE, ARQUEIRO, CHEFAO, ATRIBUTOS, REGRAS, NOMES_ATRIBUTO, calcularDano, pontosDeAtaque, vidaPorSegundo } from './config.js';
 import { Input } from './input.js';
 import { criarMundo, texturaBrilho } from './world.js';
 import { criarAssassino, criarMaga, criarDuende, criarChefao, animarRig } from './models.js';
@@ -52,11 +52,13 @@ let classeSelecionada = 'assassino';
 let jogador = null;
 let duendes = [];
 let projeteis = [];
+let flechas = [];
 let rastro = null;
-let total = 0, criados = 0, mortos = 0, timerSurgir = 0;
+let mortos = 0;
+let filaInimigos = []; // duendes planejados ao longo da trilha, ordenados pela posição
+let progresso = 0;     // quantos metros da trilha o jogador já percorreu
 let timerFim = -1;
 let chefao = null;
-let timerChefao = -1;
 let tremor = 0;
 const cam = { yaw: Math.PI * 0.25, pitch: 0.42, dist: 6.5 };
 
@@ -146,6 +148,8 @@ function limparPartida() {
   if (jogador) scene.remove(jogador.rig.root);
   for (const d of duendes) removerDuende(d);
   for (const p of projeteis) scene.remove(p.malha);
+  for (const f of flechas) scene.remove(f.malha);
+  flechas = [];
   if (rastro) rastro.remover(scene);
   jogador = null;
   chefao = null;
@@ -176,6 +180,8 @@ function iniciarJogo(id) {
     ataqueT: -1,
     acertou: false,
     invul: 0,
+    semDano: 0,
+    regenT: 0,
     vivo: true,
     mortoT: 0,
     raio: 0.4,
@@ -183,12 +189,10 @@ function iniciarJogo(id) {
   rig.root.rotation.y = jogador.dir;
   if (cls.ataque.tipo === 'fisico') rastro = new RastroGolpe(scene, cls.ataque.arco);
 
-  total = Math.floor(aleatorio(REGRAS.duendesMin, REGRAS.duendesMax + 1));
-  criados = 0;
   mortos = 0;
-  timerSurgir = 1.5;
+  progresso = mundo.consultar(0, 0).s;
+  filaInimigos = planejarInimigos();
   timerFim = -1;
-  timerChefao = -1;
   tremor = 0;
   $('boss-bar').classList.add('hidden');
   cam.yaw = 0;
@@ -215,7 +219,8 @@ function atualizarHUD() {
   $('hp-fill').style.width = `${f * 100}%`;
   $('hp-fill').classList.toggle('baixa', f <= 0.3);
   $('hp-text').textContent = `${Math.max(0, Math.ceil(jogador.hp))} / ${jogador.hpMax}`;
-  $('kills').textContent = `${mortos} / ${total}`;
+  $('kills').textContent = String(mortos);
+  $('path-fill').style.width = `${Math.min(100, (progresso / mundo.comprimento) * 100)}%`;
   if (chefao) $('boss-fill').style.width = `${Math.max(0, chefao.hp / chefao.hpMax) * 100}%`;
 }
 
@@ -225,11 +230,12 @@ function terminar(vitoria) {
   input.reiniciar();
   $('end-title').textContent = vitoria ? 'Vitória!' : 'Você morreu';
   $('end-title').className = vitoria ? 'vitoria' : 'derrota';
+  const pct = Math.round(Math.min(1, progresso / mundo.comprimento) * 100);
   $('end-text').textContent = vitoria
-    ? `Os ${total} duendes e o ${CHEFAO.nome} foram derrotados. A floresta está livre!`
+    ? `O ${CHEFAO.nome} foi derrotado e a floresta está livre! Duendes derrotados pelo caminho: ${mortos}.`
     : chefao
-      ? `Você derrotou os ${total} duendes, mas caiu diante do ${CHEFAO.nome}.`
-      : `Você derrotou ${mortos} de ${total} duendes antes de cair.`;
+      ? `Você chegou ao fim da trilha, mas caiu diante do ${CHEFAO.nome}. Duendes derrotados: ${mortos}.`
+      : `Você percorreu ${pct}% da trilha e derrotou ${mortos} duendes antes de cair.`;
   telaFim.classList.remove('hidden');
 }
 
@@ -239,15 +245,41 @@ const geoBarraFill = new THREE.PlaneGeometry(0.76, 0.06).translate(0.38, 0, 0);
 const matBarraFundo = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false });
 const matBarraVida = new THREE.MeshBasicMaterial({ color: 0xd63a2a, depthWrite: false });
 
-/** Procura um ponto livre a uma certa distância do jogador. */
-function pontoDeSurgimento(min, max, folga) {
-  for (let i = 0; i < 60; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const r = aleatorio(min, max);
-    const x = jogador.pos.x + Math.cos(a) * r;
-    const z = jogador.pos.z + Math.sin(a) * r;
-    if (Math.hypot(x, z) > mundo.raio - 3 || !mundo.livre(x, z, folga)) continue;
-    return { x, z };
+/**
+ * Sorteia os duendes da rodada e onde cada um aparece na trilha. A densidade cresce
+ * ao longo do caminho; os arqueiros ficam nas regiões intermediária e final.
+ */
+function planejarInimigos() {
+  const L = mundo.comprimento;
+  const fim = L - REGRAS.distanciaChefao - 4;
+  const inicio = 24;
+  const sortear = (min, max) => Math.floor(aleatorio(min, max + 1));
+  const plano = [];
+  const nNormais = sortear(REGRAS.duendesMin, REGRAS.duendesMax);
+  for (let i = 0; i < nNormais; i++) {
+    // raiz quadrada: mais duendes quanto mais perto do fim
+    const u = (i + Math.random()) / nNormais;
+    plano.push({ s: inicio + (fim - inicio) * Math.sqrt(u), cfg: DUENDE });
+  }
+  const nArqueiros = sortear(REGRAS.arqueirosMin, REGRAS.arqueirosMax);
+  const inicioArq = L / 3;
+  for (let i = 0; i < nArqueiros; i++) {
+    const u = (i + Math.random()) / nArqueiros;
+    plano.push({ s: inicioArq + (fim - inicioArq) * Math.sqrt(u), cfg: ARQUEIRO });
+  }
+  return plano.sort((a, b) => a.s - b.s);
+}
+
+/** Procura um lugar livre na trilha perto da posição s, longe do jogador. */
+function pontoNaTrilha(s, folga, distMin = 11) {
+  const L = mundo.comprimento;
+  for (let i = 0; i < 40; i++) {
+    const ss = Math.min(L - 4, s + aleatorio(-4, 8) + i * 0.5);
+    const lat = aleatorio(-1, 1) * (mundo.larguraEm(ss) - 2);
+    const p = mundo.pontoNoCaminho(ss, lat);
+    if (Math.hypot(p.x - jogador.pos.x, p.z - jogador.pos.z) < distMin) continue;
+    if (!mundo.livre(p.x, p.z, folga)) continue;
+    return p;
   }
   return null;
 }
@@ -276,6 +308,8 @@ function criarInimigo(cfg, rig, x, z) {
     ataqueT: -1,
     acertou: false,
     flash: 0,
+    semDano: 0,
+    regenT: 0,
     empurrao: new THREE.Vector3(),
     desvio: cfg === CHEFAO ? 0 : aleatorio(-0.6, 0.6),
     morto: false,
@@ -288,17 +322,19 @@ function criarInimigo(cfg, rig, x, z) {
   return inimigo;
 }
 
-function surgirDuende() {
-  const p = pontoDeSurgimento(16, 28, 0.8);
+function surgirNaTrilha(item) {
+  const s = Math.max(item.s, progresso + 16);
+  const p = pontoNaTrilha(s + (item.cfg === ARQUEIRO ? 6 : 0), 0.8);
   if (!p) return;
-  criarInimigo(DUENDE, criarDuende(), p.x, p.z);
-  criados++;
+  const rig = item.cfg === ARQUEIRO ? criarDuende('arqueiro') : criarDuende();
+  const d = criarInimigo(item.cfg, rig, p.x, p.z);
+  d.recarga = aleatorio(0.8, 1.8);
   tmp.set(p.x, 0.5, p.z);
-  particulas.emitir(tmp, 0x5dff6a, 24, { vel: 3, vida: 0.8, subir: 1.5 });
+  particulas.emitir(tmp, item.cfg === ARQUEIRO ? 0xffc04a : 0x5dff6a, 24, { vel: 3, vida: 0.8, subir: 1.5 });
 }
 
 function surgirChefao() {
-  const p = pontoDeSurgimento(12, 18, 1.5) || pontoDeSurgimento(6, 30, 1.2) || { x: 0, z: 0 };
+  const p = mundo.pontoNoCaminho(mundo.comprimento - 9);
   chefao = criarInimigo(CHEFAO, criarChefao(), p.x, p.z);
   chefao.recarga = 1.5;
   // círculo vermelho que mostra onde o golpe vai cair
@@ -346,6 +382,8 @@ function danoDuende(d, dano, origem) {
   numeros.mostrar(tmp, dano, 'inimigo');
   if (d === chefao) atualizarHUD();
   particulas.emitir(tmp, 0xff4433, 14, { vel: 4, vida: 0.5, gravidade: 9 });
+  d.semDano = 0;
+  d.regenT = 0;
   if (d.hp <= 0) {
     d.morto = true;
     d.barra.visible = false;
@@ -360,24 +398,19 @@ function danoDuende(d, dano, origem) {
     mortos++;
     particulas.emitir(tmp, 0x8cff6a, 30, { vel: 3.5, vida: 1, subir: 1 });
     atualizarHUD();
-    if (mortos >= total) {
-      timerChefao = CHEFAO.atrasoSurgimento;
-      mostrarAviso('O chão treme... algo grande se aproxima!');
-    }
   }
 }
 
 function atualizarDuendes(dt, t) {
-  const vivos = duendes.filter((d) => !d.morto).length;
-  const maxVivos = Math.min(REGRAS.duendesSimultaneosMax, REGRAS.duendesSimultaneosInicio + Math.floor(mortos / 5));
-  timerSurgir -= dt;
-  if (estado === 'jogando' && jogador.vivo && criados < total && vivos < maxVivos && timerSurgir <= 0) {
-    surgirDuende();
-    timerSurgir = REGRAS.intervaloSurgimento;
-  }
-  if (timerChefao > 0 && estado === 'jogando' && jogador.vivo) {
-    timerChefao -= dt;
-    if (timerChefao <= 0) surgirChefao();
+  if (estado === 'jogando' && jogador.vivo) {
+    // os duendes vão surgindo à frente conforme o jogador avança pela trilha
+    const antes = progresso;
+    progresso = Math.max(progresso, mundo.consultar(jogador.pos.x, jogador.pos.z).s);
+    while (filaInimigos.length && filaInimigos[0].s <= progresso + REGRAS.distanciaSurgimento) {
+      surgirNaTrilha(filaInimigos.shift());
+    }
+    if (!chefao && progresso >= mundo.comprimento - REGRAS.distanciaChefao) surgirChefao();
+    if (Math.floor(antes) !== Math.floor(progresso)) atualizarHUD();
   }
 
   for (let i = duendes.length - 1; i >= 0; i--) {
@@ -401,7 +434,9 @@ function atualizarDuendes(dt, t) {
     let movendo = 0;
     d.recarga -= dt;
 
-    if (d.ataqueT >= 0) {
+    if (cfg.distancia) {
+      movendo = comportamentoArqueiro(d, dt, dist, alvoAng);
+    } else if (d.ataqueT >= 0) {
       d.ataqueT += dt;
       if (!d.acertou && d.ataqueT >= cfg.preparo) {
         d.acertou = true;
@@ -459,6 +494,8 @@ function atualizarDuendes(dt, t) {
     const prog = d.ataqueT >= 0 ? d.ataqueT / cfg.duracaoAtaque : -1;
     animarRig(rig, dt, t, d.andar, prog);
 
+    regenerar(d, dt);
+
     // pisca ao ser atingido
     d.flash = Math.max(0, d.flash - dt);
     rig.pele.emissive.setRGB(d.flash > 0 ? 1 : 0, d.flash > 0 ? 0.25 : 0, d.flash > 0 ? 0.2 : 0);
@@ -471,6 +508,114 @@ function atualizarDuendes(dt, t) {
     d.barra.position.set(d.pos.x, 1.65, d.pos.z);
     d.barra.quaternion.copy(camera.quaternion);
     d.fill.scale.x = Math.max(0.001, d.hp / d.hpMax);
+  }
+}
+
+// ------------------------------------------------------------------ Arqueiros
+/** Mantém distância do jogador, anda de lado e atira. Retorna 1 se andou. */
+function comportamentoArqueiro(d, dt, dist, alvoAng) {
+  const cfg = d.cfg;
+  if (d.ataqueT >= 0) {
+    d.ataqueT += dt;
+    if (!d.acertou && d.ataqueT >= cfg.preparo) {
+      d.acertou = true;
+      if (jogador.vivo) dispararFlecha(d);
+    }
+    if (d.ataqueT >= cfg.duracaoAtaque) d.ataqueT = -1;
+    return 0;
+  }
+  if (!jogador.vivo) return 0;
+  if (dist <= cfg.alcance && d.recarga <= 0) {
+    d.ataqueT = 0;
+    d.acertou = false;
+    d.recarga = cfg.recarga + aleatorio(0, 0.8);
+    return 0;
+  }
+  let ang, vel = d.velocidade;
+  if (dist > cfg.distanciaIdeal + 2) ang = alvoAng; // aproxima
+  else if (dist < cfg.distanciaIdeal - 3) ang = alvoAng + Math.PI; // recua
+  else {
+    ang = alvoAng + (d.desvio >= 0 ? 1 : -1) * Math.PI / 2; // anda de lado
+    vel *= 0.45;
+  }
+  d.pos.x += Math.sin(ang) * vel * dt;
+  d.pos.z += Math.cos(ang) * vel * dt;
+  return 1;
+}
+
+const geoHaste = new THREE.CylinderGeometry(0.015, 0.015, 0.75, 5).rotateX(Math.PI / 2);
+const geoPontaFlecha = new THREE.ConeGeometry(0.04, 0.12, 5).rotateX(Math.PI / 2).translate(0, 0, 0.42);
+const geoPenaFlecha = new THREE.ConeGeometry(0.05, 0.14, 4).rotateX(-Math.PI / 2).translate(0, 0, -0.33);
+const matHaste = new THREE.MeshBasicMaterial({ color: 0x8a6038 });
+const matPontaFlecha = new THREE.MeshBasicMaterial({ color: 0xd8e0ea });
+const matPenaFlecha = new THREE.MeshBasicMaterial({ color: 0xd2402e });
+const matBrilhoFlecha = new THREE.SpriteMaterial({
+  map: texturaBrilho('rgba(255,150,60,1)'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.8,
+});
+
+function dispararFlecha(d) {
+  const cfg = d.cfg;
+  const malha = new THREE.Group();
+  malha.add(new THREE.Mesh(geoHaste, matHaste), new THREE.Mesh(geoPontaFlecha, matPontaFlecha), new THREE.Mesh(geoPenaFlecha, matPenaFlecha));
+  const brilho = new THREE.Sprite(matBrilhoFlecha);
+  brilho.scale.setScalar(0.6);
+  brilho.position.z = 0.4;
+  malha.add(brilho);
+  malha.position.set(d.pos.x + Math.sin(d.dir) * 0.5, 0.95, d.pos.z + Math.cos(d.dir) * 0.5);
+  // mira onde o jogador está agora: dá para desviar andando
+  tmp.set(jogador.pos.x, 1.0, jogador.pos.z).sub(malha.position).normalize();
+  const vel = tmp.clone().multiplyScalar(cfg.velocidadeFlecha);
+  malha.lookAt(tmp.add(malha.position));
+  scene.add(malha);
+  flechas.push({ malha, vel, cfg, vida: (cfg.alcance + 6) / cfg.velocidadeFlecha });
+}
+
+function atualizarFlechas(dt) {
+  for (let i = flechas.length - 1; i >= 0; i--) {
+    const f = flechas[i];
+    f.vida -= dt;
+    f.malha.position.addScaledVector(f.vel, dt);
+    const pos = f.malha.position;
+    particulas.emitir(pos, 0x7a3a12, 1, { vel: 0.2, vida: 0.25 });
+    let fim = f.vida <= 0;
+    if (!fim && jogador.vivo) {
+      tmp2.set(jogador.pos.x, 1.0, jogador.pos.z);
+      if (tmp2.distanceTo(pos) < 0.6) {
+        tmp.copy(pos).addScaledVector(f.vel, -0.05);
+        danoJogador(calcularDano(pontosDeAtaque(f.cfg, f.cfg.atributoAtaque), jogador.cls.defesa), tmp);
+        fim = true;
+      }
+    }
+    if (!fim && mundo.colideObstaculo(pos.x, pos.z, 0.05)) {
+      particulas.emitir(pos, 0xa07040, 8, { vel: 2, vida: 0.4, gravidade: 6 });
+      fim = true;
+    }
+    if (fim) {
+      scene.remove(f.malha);
+      flechas.splice(i, 1);
+    }
+  }
+}
+
+// ------------------------------------------------------------------ Regeneração
+/** Depois de 5 s sem tomar dano, recupera 3% da vida máxima (arredondado para cima) por segundo. */
+function regenerar(ent, dt) {
+  ent.semDano += dt;
+  if (ent.semDano < REGRAS.regeneracaoEspera || ent.hp >= ent.hpMax) {
+    ent.regenT = 0;
+    return;
+  }
+  ent.regenT += dt;
+  while (ent.regenT >= 1) {
+    ent.regenT -= 1;
+    const ganho = Math.min(vidaPorSegundo(ent.hpMax), ent.hpMax - ent.hp);
+    ent.hp += ganho;
+    if (ent === jogador) {
+      tmp.copy(jogador.pos).setY(2.0);
+      numeros.mostrar(tmp, `+${ganho}`, 'cura');
+      particulas.emitir(tmp.setY(1.0), 0x6aff8a, 6, { vel: 1, vida: 0.7, subir: 1.2 });
+    }
+    if (ent === jogador || ent === chefao) atualizarHUD();
   }
 }
 
@@ -557,11 +702,7 @@ function atualizarProjeteis(dt) {
         break;
       }
     }
-    if (!explodiu) {
-      tmp2.copy(p.malha.position);
-      mundo.resolverColisao(tmp2, 0.15);
-      if (tmp2.distanceToSquared(p.malha.position) > 1e-6) explodiu = true; // bateu numa árvore
-    }
+    if (!explodiu && mundo.colideObstaculo(p.malha.position.x, p.malha.position.z, 0.15)) explodiu = true; // bateu numa árvore
     if (explodiu) {
       particulas.emitir(p.malha.position, 0x7fd8ff, 26, { vel: 4, vida: 0.55 });
       scene.remove(p.malha);
@@ -574,6 +715,8 @@ function danoJogador(dano, origem) {
   if (!jogador.vivo || jogador.invul > 0) return;
   jogador.hp -= dano;
   jogador.invul = REGRAS.invulnerabilidade;
+  jogador.semDano = 0;
+  jogador.regenT = 0;
   tremor = 0.25;
   tmp.copy(jogador.pos).setY(1.8);
   numeros.mostrar(tmp, dano, 'jogador');
@@ -597,6 +740,7 @@ function atualizarJogador(dt, t) {
   j.invul = Math.max(0, j.invul - dt);
   j.recarga -= dt;
 
+  if (j.vivo) regenerar(j, dt);
   if (!j.vivo) {
     j.mortoT += dt;
     rig.root.rotation.x = Math.max(-Math.PI / 2, rig.root.rotation.x - dt * 4);
@@ -707,6 +851,7 @@ function loop() {
     atualizarJogador(dt, tempo);
     atualizarDuendes(dt, tempo);
     atualizarProjeteis(dt);
+    atualizarFlechas(dt);
     if (rastro) rastro.atualizar(dt);
     mundo.atualizar(dt, tempo, jogador.pos, camera);
     luzJogador.position.set(jogador.pos.x, 3, jogador.pos.z);

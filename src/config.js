@@ -63,6 +63,27 @@ export const DUENDE = {
   alturaAcerto: 0.7,
 };
 
+export const ARQUEIRO = {
+  nome: 'Duende Arqueiro',
+  vida: 75,
+  poder: 30,
+  velocidade: 25,
+  defesa: 20,
+  inteligencia: 0,
+  atributoAtaque: 'poder', // a flecha usa o Poder
+  distancia: true,
+  alcance: 14,          // distância máxima do tiro
+  distanciaIdeal: 9,    // tenta manter essa distância do jogador
+  recarga: 2.2,
+  preparo: 0.8,         // tempo puxando a corda
+  duracaoAtaque: 1.1,
+  velocidadeFlecha: 19,
+  raio: 0.4,
+  empurrao: 0.8,
+  interrompivel: true,
+  alturaAcerto: 0.7,
+};
+
 export const CHEFAO = {
   nome: 'Chefão Duende',
   vida: 200,
@@ -79,7 +100,6 @@ export const CHEFAO = {
   empurrao: 0.12,
   interrompivel: false,
   alturaAcerto: 1.4,
-  atrasoSurgimento: 2.5, // segundos após o último duende cair
 };
 
 export const ATRIBUTOS = [
@@ -92,14 +112,21 @@ export const ATRIBUTOS = [
 
 export const REGRAS = {
   duendesMin: 20,
-  duendesMax: 30,
-  duendesSimultaneosInicio: 3,
-  duendesSimultaneosMax: 7,
-  intervaloSurgimento: 1.2,
+  duendesMax: 25,
+  arqueirosMin: 5,
+  arqueirosMax: 8,
+  distanciaSurgimento: 30, // os duendes surgem esta distância à frente do jogador na trilha
+  distanciaChefao: 34,     // o chefão surge quando o jogador chega a esta distância do fim
   escalaVelocidade: 0.2,   // atributo de velocidade -> metros por segundo
-  raioMapa: 55,
   invulnerabilidade: 0.45, // segundos sem receber dano após ser atingido
+  regeneracaoEspera: 5,     // segundos sem tomar dano antes de começar a recuperar vida
+  regeneracaoPorSegundo: 0.03, // fração da vida máxima recuperada por segundo
 };
+
+/** Vida recuperada a cada segundo de regeneração: 3% da vida máxima, arredondado para cima. */
+export function vidaPorSegundo(vidaMaxima) {
+  return Math.ceil(vidaMaxima * REGRAS.regeneracaoPorSegundo - 1e-9);
+}
 
 // Cada ataque usa um atributo: 1 ponto de Poder ou de Inteligência = 1 ponto de ataque.
 // Dano = ataque² / (ataque + defesa). Quanto maior a defesa, menor o dano.

@@ -353,6 +353,13 @@ function recursosDuende() {
   D.dente = toon(0xfff6d8);
   D.boca = toon(0x3a0f12);
   D.sob = toon(0x2c3d17);
+  D.tunicaArqueiro = toon(0x2e4a24);
+  D.capuz = toon(0x3b5530);
+  D.couroArqueiro = toon(0x6b4423);
+  D.madeiraArco = toon(0x7a5230);
+  D.pena = toon(0xc23a2a);
+  D.corda = new THREE.MeshBasicMaterial({ color: 0xd8d0b8 });
+  D.ponta = toon(0xb8c4d6, { emissive: 0x2a3550, emissiveIntensity: 0.5 });
   D.geoClava = G.torno([[0, 0], [0.035, 0], [0.04, 0.2], [0.075, 0.38], [0.1, 0.5], [0.085, 0.6], [0, 0.63]], 10);
   D.geoEspinho = G.cone(0.025, 0.08, 6);
   D.geoBarriga = G.esfera;
@@ -370,12 +377,42 @@ function recursosDuende() {
   return D;
 }
 
-export function criarDuende() {
+/** Duende comum (clava) ou arqueiro (`variante = 'arqueiro'`: capuz, aljava e arco). */
+/**
+ * Arco na mão do arqueiro. O arco fica de pé e com a curva para frente quando o
+ * braço está erguido à frente do corpo. Inclui uma flecha que só aparece ao mirar.
+ */
+function montarArco(rig, mao, d) {
+  const arco = new THREE.Group();
+  const base = new THREE.Matrix4().makeBasis(
+    new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(-1, 0, 0)
+  );
+  arco.quaternion.setFromRotationMatrix(base);
+  const raio = 0.36;
+  const curva = parte(new THREE.TorusGeometry(raio, 0.022, 6, 18, Math.PI * 0.8), d.madeiraArco, { p: [-raio, 0, 0], r: [0, 0, -Math.PI * 0.4] });
+  arco.add(curva);
+  const xCorda = Math.cos(Math.PI * 0.4) * raio - raio;
+  const altCorda = Math.sin(Math.PI * 0.4) * raio * 2;
+  arco.add(parte(G.cil(0.006, 0.006, altCorda, 4), d.corda, { p: [xCorda, 0, 0], contorno: false, sombra: false }));
+  arco.add(parte(G.cil(0.035, 0.035, 0.12, 8), d.couroArqueiro, { contorno: false }));
+  // flecha encaixada
+  const flecha = new THREE.Group();
+  flecha.add(parte(G.cil(0.01, 0.01, 0.62, 5), d.madeiraArco, { p: [0.05, 0, 0], r: [0, 0, Math.PI / 2], contorno: false, sombra: false }));
+  flecha.add(parte(G.cone(0.025, 0.08, 5), d.ponta, { p: [0.39, 0, 0], r: [0, 0, -Math.PI / 2], contorno: false, sombra: false }));
+  flecha.add(parte(G.cone(0.03, 0.08, 4), d.pena, { p: [-0.22, 0, 0], r: [0, 0, -Math.PI / 2], contorno: false, sombra: false }));
+  flecha.visible = false;
+  arco.add(flecha);
+  mao.add(arco);
+  rig.flechaArco = flecha;
+}
+
+export function criarDuende(variante = 'normal') {
   const d = recursosDuende();
-  const rig = baseRig('duende');
+  const arqueiro = variante === 'arqueiro';
+  const rig = baseRig(arqueiro ? 'arqueiro' : 'duende');
   const { corpo } = rig;
   // material de pele próprio para piscar ao ser atingido
-  const pele = toon(0x6fae3c, { emissive: 0x000000 }, true);
+  const pele = toon(arqueiro ? 0x9bb53e : 0x6fae3c, { emissive: 0x000000 }, true);
   rig.pele = pele;
 
   // pernas curtas e pés grandes
@@ -390,7 +427,7 @@ export function criarDuende() {
 
   // barriga redonda, túnica rasgada e cinto de corda
   corpo.add(parte(G.esfera, pele, { p: [0, 0.62, 0.02], s: [0.25, 0.27, 0.23] }));
-  corpo.add(parte(G.cil(0.24, 0.29, 0.3, 9), d.tunica, { p: [0, 0.48, 0.01] }));
+  corpo.add(parte(G.cil(0.24, 0.29, 0.3, 9), arqueiro ? d.tunicaArqueiro : d.tunica, { p: [0, 0.48, 0.01] }));
   corpo.add(parte(G.toro(0.245, 0.025), d.cinto, { p: [0, 0.6, 0.01], r: [Math.PI / 2, 0, 0], contorno: false }));
 
   // cabeça grande: orelhas pontudas, nariz comprido, olhos amarelos e sorriso dentuço
@@ -404,8 +441,15 @@ export function criarDuende() {
   const nariz = parte(d.geoNariz, pele, { p: [0, -0.02, R * 0.8], r: [0.35, 0, 0] });
   cabeca.add(nariz);
   cabeca.add(parte(G.esferaB, pele, { p: [0, -0.1, R * 0.8 + 0.2], s: 0.045 }));
-  cabeca.add(olho(R * 0.95, 0.1, 0.06, 0.065, 0xff3418, { raiva: 0x5f9a33, emissivo: true }));
-  cabeca.add(olho(R * 0.95, -0.1, 0.06, 0.065, 0xff3418, { raiva: 0x5f9a33, emissivo: true }));
+  const corOlho = arqueiro ? 0xffb020 : 0xff3418;
+  const corPalpebra = arqueiro ? 0x8aa236 : 0x5f9a33;
+  cabeca.add(olho(R * 0.95, 0.1, 0.06, 0.065, corOlho, { raiva: corPalpebra, emissivo: true }));
+  cabeca.add(olho(R * 0.95, -0.1, 0.06, 0.065, corOlho, { raiva: corPalpebra, emissivo: true }));
+  if (arqueiro) {
+    // capuz de caçador com ponta caída para trás
+    cabeca.add(parte(new THREE.SphereGeometry(R * 1.12, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.47), d.capuz, { p: [0, 0.02, -0.02], r: [-0.35, 0, 0] }));
+    cabeca.add(parte(G.cone(0.13, 0.4, 10), d.capuz, { p: [0, 0.1, -0.32], r: [-2.1, 0, 0] }));
+  }
   cabeca.add(sobrancelha(0.1, 0.15, R * 0.82, 0.08, 0.5, d.sob));
   cabeca.add(sobrancelha(-0.1, 0.15, R * 0.82, 0.08, -0.5, d.sob));
   const boca = parte(G.esferaB, d.boca, { p: [0, -0.13, R * 0.78], s: [0.12, 0.04, 0.05], contorno: false, sombra: false });
@@ -416,9 +460,25 @@ export function criarDuende() {
   corpo.add(cabeca);
   rig.cabeca = cabeca;
 
-  // braços finos, mãos grandes e clava com espinhos
+  // braços finos, mãos grandes e clava com espinhos (ou arco)
   const be = braco(0.27, 0.78, 0.36, 0.045, pele, pele, 0.07);
   const bd = braco(-0.27, 0.78, 0.36, 0.045, pele, pele, 0.07);
+  if (arqueiro) {
+    montarArco(rig, be.mao, d);
+    // aljava nas costas com flechas
+    const aljava = grupo(0.05, 0.78, -0.24);
+    aljava.rotation.set(-0.2, 0, -0.45);
+    aljava.add(parte(G.cil(0.07, 0.06, 0.5, 10), d.couroArqueiro));
+    for (const [x, z] of [[0.025, 0], [-0.025, 0.02], [0, -0.03]]) {
+      aljava.add(parte(G.cil(0.008, 0.008, 0.2, 4), d.madeiraArco, { p: [x, 0.32, z], contorno: false, sombra: false }));
+      aljava.add(parte(G.cone(0.028, 0.08, 4), d.pena, { p: [x, 0.43, z], contorno: false, sombra: false }));
+    }
+    corpo.add(aljava);
+    rig.bracoE = be.pivo;
+    rig.bracoD = bd.pivo;
+    corpo.add(rig.bracoE, rig.bracoD);
+    return rig;
+  }
   const clava = grupo(0, 0, 0.02);
   clava.rotation.x = Math.PI / 2.3;
   clava.add(parte(d.geoClava, d.clava, { p: [0, -0.08, 0] }));
@@ -546,7 +606,7 @@ const suave = (x) => x * x * (3 - 2 * x);
  * @param ataque    progresso do ataque 0..1, ou -1 se não estiver atacando
  */
 export function animarRig(rig, dt, t, andar, ataque = -1) {
-  const freq = { duende: 14, assassino: 12, maga: 9, chefao: 6 }[rig.tipo];
+  const freq = { duende: 14, arqueiro: 14, assassino: 12, maga: 9, chefao: 6 }[rig.tipo];
   rig.fase += dt * freq * (0.4 + andar * 0.6);
   const s = Math.sin(rig.fase);
   const amp = rig.tipo === 'maga' ? 0.5 : 0.8;
@@ -566,6 +626,11 @@ export function animarRig(rig, dt, t, andar, ataque = -1) {
     const o = Math.sin(t * 8 + rig.fase) * 0.08;
     rig.orelhas[0].rotation.z = -1.25 + o;
     rig.orelhas[1].rotation.z = 1.25 - o;
+  }
+  if (rig.tipo === 'arqueiro') {
+    // segura o arco um pouco à frente
+    rig.bracoE.rotation.x = -0.55 + s * 0.15 * andar;
+    rig.flechaArco.visible = false;
   }
   if (rig.tipo === 'chefao') {
     // braços afastados da barriga
@@ -597,6 +662,16 @@ export function animarRig(rig, dt, t, andar, ataque = -1) {
     rig.bracoE.rotation.x = -a * 0.9;
     rig.bracoE.rotation.z = a * 0.4;
     rig.corpo.rotation.x = -a * 0.08;
+  } else if (rig.tipo === 'arqueiro') {
+    // estica o braço do arco, puxa a corda e solta
+    const soltar = 0.73;
+    const a = p < soltar ? suave(p / soltar) : 1 - suave((p - soltar) / (1 - soltar)) * 0.6;
+    rig.bracoE.rotation.x = -0.55 - a * 1.0;
+    rig.bracoE.rotation.z = 0;
+    rig.bracoD.rotation.x = -1.45 * a;
+    rig.bracoD.rotation.z = 0.55 * a;
+    rig.corpo.rotation.y = -0.2 * a;
+    rig.flechaArco.visible = p < soltar && p > 0.1;
   } else if (rig.tipo === 'chefao') {
     // chefão: ergue a clava com as duas mãos e esmaga o chão
     const sobe = Math.min(1, p / 0.68);

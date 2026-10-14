@@ -104,7 +104,17 @@ button { font: inherit; color: inherit; cursor: pointer; }
   text-align: right;
 }
 .hud-duendes .rotulo { display: block; font-size: 11px; color: var(--texto-suave); text-transform: uppercase; letter-spacing: 0.06em; }
-#kills { font-family: var(--fonte-titulo); font-size: 24px; color: #8cf06a; }
+#kills { display: block; font-family: var(--fonte-titulo); font-size: 24px; color: #8cf06a; line-height: 1.1; margin-bottom: 4px; }
+.barra-trilha {
+  width: 110px;
+  height: 6px;
+  margin-top: 3px;
+  margin-left: auto;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+#path-fill { height: 100%; width: 0; background: linear-gradient(90deg, #8a6a2a, var(--ouro)); transition: width 0.4s; }
 
 .dica {
   position: absolute;
@@ -115,7 +125,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
   background: rgba(0, 0, 0, 0.55);
   border-radius: 20px;
   font-size: 14px;
-  white-space: nowrap;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  text-align: center;
   transition: opacity 1s;
 }
 .dica.some { opacity: 0; }
@@ -247,6 +259,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .dano.inimigo { color: #ffe27a; }
 .dano.jogador { color: #ff4a3a; font-size: 26px; }
+.dano.cura { color: #7dff8f; font-size: 18px; }
 
 #hurt-vignette {
   position: fixed;

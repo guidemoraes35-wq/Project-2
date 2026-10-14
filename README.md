@@ -2,9 +2,10 @@
 
 Jogo medieval 3D para navegador (feito para celular, mas funciona no computador).
 O jogador escolhe um avatar — **Assassino** ou **Maga** — e entra numa dungeon:
-uma floresta escura, iluminada apenas pela lua e por algumas lamparinas.
-Para vencer, é preciso derrotar todos os duendes (entre 20 e 30) que surgem na floresta
-e, depois deles, o **Chefão Duende**.
+uma trilha sinuosa por uma floresta escura, iluminada apenas pela lua e por lamparinas,
+e cercada por um rio que não pode ser atravessado. Quanto mais se avança pela trilha,
+mais duendes aparecem. No fim dela, numa clareira com pedras antigas, espera o
+**Chefão Duende**: derrotá-lo vence o jogo.
 
 ## Como jogar
 
@@ -41,6 +42,7 @@ node tools/build-single-html.mjs
 | Assassino | 100 | 30 | 35 | 10 | 15 |
 | Maga | 150 | 10 | 20 | 20 | 40 |
 | Duende | 50 | 10 | 20 | 10 | 0 |
+| Duende Arqueiro | 75 | 30 | 25 | 20 | 0 |
 | Chefão Duende | 200 | 40 | 10 | 50 | 0 |
 
 - **Vida**: pontos de vida; ao chegar a zero, o personagem morre.
@@ -50,13 +52,23 @@ node tools/build-single-html.mjs
 - **Inteligência**: dano dos ataques mágicos (orbes da Maga).
 
 Cada ataque usa um atributo, e 1 ponto de Poder ou de Inteligência vale 1 ponto de ataque.
-Hoje o Assassino ataca com o Poder, a Maga com a Inteligência e os duendes com o Poder.
+Hoje o Assassino ataca com o Poder, a Maga com a Inteligência e os duendes (inclusive as
+flechas do arqueiro) com o Poder.
+
+**Regeneração:** depois de 5 segundos sem tomar dano, todos os personagens recuperam 3% da
+vida máxima por segundo, arredondado para cima (Assassino 3, Maga 5, Duende 2, Arqueiro 3,
+Chefão 6 por segundo).
+
+**Duendes por rodada:** 20 a 25 duendes comuns ao longo de toda a trilha e 5 a 8 arqueiros
+nas regiões intermediária e final. Eles surgem à frente do jogador conforme ele avança,
+cada vez mais concentrados perto do fim. O arqueiro mantém distância e atira flechas na
+posição atual do jogador: andando, dá para desviar.
 
 Fórmula de dano: `dano = ataque² / (ataque + defesa)`, arredondado, mínimo 1.
 Por exemplo: Assassino → duende = 30²/40 ≈ 23 (3 golpes); Maga → duende = 40²/50 = 32 (2 orbes);
 duende → Assassino = 10²/20 = 5 (20 golpes); duende → Maga = 10²/30 ≈ 3 (50 golpes).
 
-O Chefão aparece alguns segundos depois que o último duende cai. Ele é lento, mas cada golpe da
+O Chefão aparece quando o jogador chega à clareira no fim da trilha. Ele é lento, mas cada golpe da
 clava é pesado: Assassino → chefão = 30²/80 ≈ 11 (19 golpes); Maga → chefão = 40²/90 ≈ 18 (12 orbes);
 chefão → Assassino = 40²/50 = 32 (4 golpes); chefão → Maga = 40²/60 ≈ 27 (6 golpes).
 Um círculo vermelho no chão avisa onde a clava vai cair: saia dele para não ser atingido.
@@ -70,7 +82,7 @@ index.html        HUD, controles e telas
 css/style.css     estilos (responsivo: celular em pé/deitado e computador)
 src/config.js     atributos, regras e fórmula de dano
 src/main.js       loop do jogo, jogador, duendes, combate, câmera, telas
-src/world.js      floresta: árvores, lamparinas, lua, névoa, vaga-lumes, colisões
+src/world.js      trilha, rio, floresta, lamparinas, clareira final, lua, colisões
 src/models.js     modelos cartoon (sombreado toon + contorno) e animações
 src/effects.js    partículas, rastro de golpe e números de dano
 src/input.js      joystick, botão de ataque, arrastar câmera e teclado
