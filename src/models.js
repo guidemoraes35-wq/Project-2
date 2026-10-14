@@ -179,8 +179,8 @@ export function criarAssassino() {
   cabeca.add(olho(R, 0.085, 0.03, 0.055, 0xd9a233, { raiva: 0xf0b98d }));
   cabeca.add(olho(R, -0.085, 0.03, 0.055, 0xd9a233, { raiva: 0xf0b98d }));
   const sob = toon(0x3a2416);
-  cabeca.add(sobrancelha(0.085, 0.115, R * 0.9, 0.06, -0.35, sob));
-  cabeca.add(sobrancelha(-0.085, 0.115, R * 0.9, 0.06, 0.35, sob));
+  cabeca.add(sobrancelha(0.085, 0.115, R * 0.9, 0.06, 0.35, sob));
+  cabeca.add(sobrancelha(-0.085, 0.115, R * 0.9, 0.06, -0.35, sob));
   corpo.add(cabeca);
   rig.cabeca = cabeca;
 
@@ -258,8 +258,8 @@ export function criarMaga() {
   for (const x of [0.09, -0.09]) {
     cabeca.add(parte(G.capsula(0.012, 0.06), cilio, { p: [x * 1.12, 0.055, R * 0.86], r: [0, 0, Math.PI / 2 + (x > 0 ? -0.2 : 0.2)], contorno: false, sombra: false }));
   }
-  cabeca.add(sobrancelha(0.09, 0.1, R * 0.9, 0.05, 0.15, toon(0xb8b0e0)));
-  cabeca.add(sobrancelha(-0.09, 0.1, R * 0.9, 0.05, -0.15, toon(0xb8b0e0)));
+  cabeca.add(sobrancelha(0.09, 0.1, R * 0.9, 0.05, -0.12, toon(0xb8b0e0)));
+  cabeca.add(sobrancelha(-0.09, 0.1, R * 0.9, 0.05, 0.12, toon(0xb8b0e0)));
   const rubor = toon(0xff9a9a);
   cabeca.add(parte(G.esferaB, rubor, { p: [0.14, -0.07, R * 0.78], s: [0.04, 0.022, 0.01], r: [0, 0.5, 0], contorno: false, sombra: false }));
   cabeca.add(parte(G.esferaB, rubor, { p: [-0.14, -0.07, R * 0.78], s: [0.04, 0.022, 0.01], r: [0, -0.5, 0], contorno: false, sombra: false }));
@@ -406,8 +406,8 @@ export function criarDuende() {
   cabeca.add(parte(G.esferaB, pele, { p: [0, -0.1, R * 0.8 + 0.2], s: 0.045 }));
   cabeca.add(olho(R * 0.95, 0.1, 0.06, 0.065, 0xff3418, { raiva: 0x5f9a33, emissivo: true }));
   cabeca.add(olho(R * 0.95, -0.1, 0.06, 0.065, 0xff3418, { raiva: 0x5f9a33, emissivo: true }));
-  cabeca.add(sobrancelha(0.1, 0.15, R * 0.82, 0.08, -0.5, d.sob));
-  cabeca.add(sobrancelha(-0.1, 0.15, R * 0.82, 0.08, 0.5, d.sob));
+  cabeca.add(sobrancelha(0.1, 0.15, R * 0.82, 0.08, 0.5, d.sob));
+  cabeca.add(sobrancelha(-0.1, 0.15, R * 0.82, 0.08, -0.5, d.sob));
   const boca = parte(G.esferaB, d.boca, { p: [0, -0.13, R * 0.78], s: [0.12, 0.04, 0.05], contorno: false, sombra: false });
   cabeca.add(boca);
   for (const x of [-0.07, -0.025, 0.025, 0.07]) {
@@ -439,6 +439,102 @@ export function criarDuende() {
   return rig;
 }
 
+// ---------------------------------------------------------------- Chefão Duende
+export function criarChefao() {
+  const d = recursosDuende();
+  const rig = baseRig('chefao');
+  const { corpo } = rig;
+  const pele = toon(0x3f8f24, { emissive: 0x000000 }, true);
+  rig.pele = pele;
+  const peleEscura = toon(0x2c6618);
+  const couro = toon(0x5b3a1f);
+  const pelo = toon(0x6e6255);
+  const osso = toon(0xeee4c4);
+  const ferro = toon(0x6d7480, { emissive: 0x1a1d24, emissiveIntensity: 0.5 });
+  const boca = toon(0x2a0a0c);
+
+  // pernas grossas e pés enormes
+  for (const x of [0.26, -0.26]) {
+    const p = grupo(x, 0.78, 0);
+    p.add(parte(G.capsula(0.17, 0.42), pele, { p: [0, -0.34, 0] }));
+    p.add(parte(G.esfera, peleEscura, { p: [0, -0.7, 0.08], s: [0.2, 0.12, 0.3] }));
+    p.add(parte(G.cil(0.2, 0.22, 0.14, 12), couro, { p: [0, -0.52, 0] }));
+    corpo.add(p);
+    if (x > 0) rig.pernaE = p;
+    else rig.pernaD = p;
+  }
+
+  // barrigão, peito largo, tanga de couro e cinto com caveira
+  corpo.add(parte(G.esfera, pele, { p: [0, 1.25, 0.06], s: [0.66, 0.62, 0.6] }));
+  corpo.add(parte(G.esfera, pele, { p: [0, 1.78, -0.02], s: [0.6, 0.42, 0.46] }));
+  corpo.add(parte(G.esferaB, peleEscura, { p: [0, 1.2, 0.655], s: [0.035, 0.05, 0.02], contorno: false, sombra: false }));
+  corpo.add(parte(G.cil(0.58, 0.64, 0.42, 14), couro, { p: [0, 0.86, 0.02] }));
+  corpo.add(parte(G.toro(0.6, 0.06), toon(0x3a2412), { p: [0, 1.02, 0.03], r: [Math.PI / 2, 0, 0], s: [1, 0.92, 1] }));
+  const caveira = grupo(0, 1.02, 0.64);
+  caveira.add(parte(G.esfera, osso, { s: [0.11, 0.1, 0.08] }));
+  caveira.add(parte(G.esferaB, matPreto, { p: [0.04, 0.01, 0.065], s: 0.025, contorno: false, sombra: false }));
+  caveira.add(parte(G.esferaB, matPreto, { p: [-0.04, 0.01, 0.065], s: 0.025, contorno: false, sombra: false }));
+  corpo.add(caveira);
+  // ombreiras de pele com espinhos de ferro
+  for (const x of [0.55, -0.55]) {
+    corpo.add(parte(G.esfera, pelo, { p: [x, 2.0, -0.02], s: [0.3, 0.2, 0.3] }));
+    for (let i = 0; i < 3; i++) {
+      corpo.add(parte(G.cone(0.05, 0.2, 8), ferro, { p: [x + (i - 1) * 0.12 * Math.sign(x), 2.17, -0.02], r: [0, 0, -Math.sign(x) * 0.3] }));
+    }
+  }
+
+  // cabeça: mandíbula saliente com presas, sobrancelhas grossas franzidas, boca virada para baixo
+  const R = 0.36;
+  const cabeca = grupo(0, 2.3, 0.12);
+  cabeca.add(parte(G.esfera, pele, { s: [R * 1.05, R * 0.95, R * 0.95] }));
+  cabeca.add(parte(G.esfera, pele, { p: [0, -0.17, 0.08], s: [0.33, 0.18, 0.28] }));
+  for (const x of [0.13, -0.13]) {
+    cabeca.add(parte(G.cone(0.04, 0.16, 8), osso, { p: [x, -0.07, 0.33], r: [-0.15, 0, -Math.sign(x) * 0.15] }));
+  }
+  cabeca.add(parte(new THREE.TorusGeometry(0.09, 0.016, 6, 14, Math.PI), boca, {
+    p: [0, -0.15, 0.365], s: [1.3, 1, 1], contorno: false, sombra: false,
+  }));
+  cabeca.add(parte(G.esfera, peleEscura, { p: [0, 0.0, R * 0.95], s: [0.085, 0.06, 0.07] }));
+  cabeca.add(olho(R, 0.12, 0.08, 0.05, 0xff2a10, { raiva: 0x3f8f24, emissivo: true }));
+  cabeca.add(olho(R, -0.12, 0.08, 0.05, 0xff2a10, { raiva: 0x3f8f24, emissivo: true }));
+  // sobrancelhas pesadas em "V"
+  cabeca.add(parte(G.capsula(0.035, 0.13), peleEscura, { p: [0.11, 0.15, R * 0.86], r: [0, 0, Math.PI / 2 + 0.55] }));
+  cabeca.add(parte(G.capsula(0.035, 0.13), peleEscura, { p: [-0.11, 0.15, R * 0.86], r: [0, 0, Math.PI / 2 - 0.55] }));
+  // cicatriz no olho esquerdo
+  cabeca.add(parte(G.capsula(0.008, 0.16), toon(0xc98a7a), { p: [0.13, 0.08, R * 0.93], r: [0, 0, 0.35], contorno: false, sombra: false }));
+  // orelhas caídas
+  const orelhaE = parte(d.geoOrelha, pele, { p: [0.3, 0.03, -0.04], r: [0.5, 0, -1.7], s: [1.1, 0.75, 0.5] });
+  const orelhaD = parte(d.geoOrelha, pele, { p: [-0.3, 0.03, -0.04], r: [0.5, 0, 1.7], s: [1.1, 0.75, 0.5] });
+  cabeca.add(orelhaE, orelhaD);
+  // capacete de ferro amassado
+  cabeca.add(parte(new THREE.SphereGeometry(R * 1.04, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.38), ferro, { p: [0, 0.03, -0.02], r: [-0.2, 0, 0] }));
+  cabeca.add(parte(G.cone(0.05, 0.22, 8), ferro, { p: [0, 0.36, -0.06] }));
+  corpo.add(cabeca);
+  rig.cabeca = cabeca;
+
+  // braços enormes, braçadeiras e um tronco de árvore como clava
+  const be = braco(0.68, 1.98, 0.8, 0.14, pele, pele, 0.17);
+  const bd = braco(-0.68, 1.98, 0.8, 0.14, pele, pele, 0.17);
+  for (const b of [be, bd]) b.pivo.add(parte(G.cil(0.165, 0.155, 0.22, 12), couro, { p: [0, -0.6, 0] }));
+  const clava = grupo(0, 0, 0.04);
+  clava.rotation.x = Math.PI / 2.3;
+  clava.add(parte(d.geoClava, toon(0x4a3018), { p: [0, -0.2, 0], s: [2.4, 2.3, 2.4] }));
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    clava.add(parte(G.cone(0.04, 0.16, 6), ferro, {
+      p: [Math.cos(a) * 0.21, 0.75 + (i % 2) * 0.25, Math.sin(a) * 0.21],
+      r: [Math.sin(a) * Math.PI / 2, 0, -Math.cos(a) * Math.PI / 2],
+      contorno: false,
+    }));
+  }
+  bd.mao.add(clava);
+  rig.bracoE = be.pivo;
+  rig.bracoD = bd.pivo;
+  corpo.add(rig.bracoE, rig.bracoD);
+  rig.root.scale.setScalar(1.12);
+  return rig;
+}
+
 // ------------------------------------------------------------------ Animação
 const suave = (x) => x * x * (3 - 2 * x);
 
@@ -450,7 +546,7 @@ const suave = (x) => x * x * (3 - 2 * x);
  * @param ataque    progresso do ataque 0..1, ou -1 se não estiver atacando
  */
 export function animarRig(rig, dt, t, andar, ataque = -1) {
-  const freq = rig.tipo === 'duende' ? 14 : rig.tipo === 'assassino' ? 12 : 9;
+  const freq = { duende: 14, assassino: 12, maga: 9, chefao: 6 }[rig.tipo];
   rig.fase += dt * freq * (0.4 + andar * 0.6);
   const s = Math.sin(rig.fase);
   const amp = rig.tipo === 'maga' ? 0.5 : 0.8;
@@ -470,6 +566,11 @@ export function animarRig(rig, dt, t, andar, ataque = -1) {
     const o = Math.sin(t * 8 + rig.fase) * 0.08;
     rig.orelhas[0].rotation.z = -1.25 + o;
     rig.orelhas[1].rotation.z = 1.25 - o;
+  }
+  if (rig.tipo === 'chefao') {
+    // braços afastados da barriga
+    rig.bracoE.rotation.z = 0.3;
+    rig.bracoD.rotation.z = -0.3;
   }
   if (rig.tipo === 'maga') {
     // mantém o cajado à frente
@@ -496,6 +597,16 @@ export function animarRig(rig, dt, t, andar, ataque = -1) {
     rig.bracoE.rotation.x = -a * 0.9;
     rig.bracoE.rotation.z = a * 0.4;
     rig.corpo.rotation.x = -a * 0.08;
+  } else if (rig.tipo === 'chefao') {
+    // chefão: ergue a clava com as duas mãos e esmaga o chão
+    const sobe = Math.min(1, p / 0.68);
+    const desce = Math.min(1, Math.max(0, (p - 0.68) / 0.08));
+    const volta = Math.max(0, (p - 0.85) / 0.15);
+    const braco = -2.9 * suave(sobe) + desce * 3.4 - volta * 0.5;
+    rig.bracoD.rotation.x = braco;
+    rig.bracoE.rotation.x = braco;
+    rig.bracoE.rotation.z = -0.35 * sobe * (1 - desce);
+    rig.corpo.rotation.x = -0.2 * sobe + desce * 0.45 - volta * 0.45;
   } else {
     // duende: ergue a clava e bate
     const sobe = Math.min(1, p / 0.55);

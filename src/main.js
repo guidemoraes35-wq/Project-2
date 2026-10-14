@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { CLASSES, DUENDE, ATRIBUTOS, REGRAS, NOMES_ATRIBUTO, calcularDano, pontosDeAtaque } from './config.js';
+import { CLASSES, DUENDE, CHEFAO, ATRIBUTOS, REGRAS, NOMES_ATRIBUTO, calcularDano, pontosDeAtaque } from './config.js';
 import { Input } from './input.js';
 import { criarMundo, texturaBrilho } from './world.js';
-import { criarAssassino, criarMaga, criarDuende, animarRig } from './models.js';
+import { criarAssassino, criarMaga, criarDuende, criarChefao, animarRig } from './models.js';
 import { Particulas, RastroGolpe, NumerosDano } from './effects.js';
 
 // ------------------------------------------------------------------ Elementos
@@ -55,6 +55,8 @@ let projeteis = [];
 let rastro = null;
 let total = 0, criados = 0, mortos = 0, timerSurgir = 0;
 let timerFim = -1;
+let chefao = null;
+let timerChefao = -1;
 let tremor = 0;
 const cam = { yaw: Math.PI * 0.25, pitch: 0.42, dist: 6.5 };
 
@@ -146,6 +148,7 @@ function limparPartida() {
   for (const p of projeteis) scene.remove(p.malha);
   if (rastro) rastro.remover(scene);
   jogador = null;
+  chefao = null;
   duendes = [];
   projeteis = [];
   rastro = null;
@@ -185,7 +188,9 @@ function iniciarJogo(id) {
   mortos = 0;
   timerSurgir = 1.5;
   timerFim = -1;
+  timerChefao = -1;
   tremor = 0;
+  $('boss-bar').classList.add('hidden');
   cam.yaw = 0;
   cam.pitch = 0.42;
 
@@ -211,6 +216,7 @@ function atualizarHUD() {
   $('hp-fill').classList.toggle('baixa', f <= 0.3);
   $('hp-text').textContent = `${Math.max(0, Math.ceil(jogador.hp))} / ${jogador.hpMax}`;
   $('kills').textContent = `${mortos} / ${total}`;
+  if (chefao) $('boss-fill').style.width = `${Math.max(0, chefao.hp / chefao.hpMax) * 100}%`;
 }
 
 function terminar(vitoria) {
@@ -220,8 +226,10 @@ function terminar(vitoria) {
   $('end-title').textContent = vitoria ? 'Vitória!' : 'Você morreu';
   $('end-title').className = vitoria ? 'vitoria' : 'derrota';
   $('end-text').textContent = vitoria
-    ? `Os ${total} duendes da floresta sombria foram derrotados.`
-    : `Você derrotou ${mortos} de ${total} duendes antes de cair.`;
+    ? `Os ${total} duendes e o ${CHEFAO.nome} foram derrotados. A floresta está livre!`
+    : chefao
+      ? `Você derrotou os ${total} duendes, mas caiu diante do ${CHEFAO.nome}.`
+      : `Você derrotou ${mortos} de ${total} duendes antes de cair.`;
   telaFim.classList.remove('hidden');
 }
 
@@ -231,53 +239,96 @@ const geoBarraFill = new THREE.PlaneGeometry(0.76, 0.06).translate(0.38, 0, 0);
 const matBarraFundo = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false });
 const matBarraVida = new THREE.MeshBasicMaterial({ color: 0xd63a2a, depthWrite: false });
 
-function surgirDuende() {
-  for (let i = 0; i < 40; i++) {
+/** Procura um ponto livre a uma certa distância do jogador. */
+function pontoDeSurgimento(min, max, folga) {
+  for (let i = 0; i < 60; i++) {
     const a = Math.random() * Math.PI * 2;
-    const r = aleatorio(16, 28);
+    const r = aleatorio(min, max);
     const x = jogador.pos.x + Math.cos(a) * r;
     const z = jogador.pos.z + Math.sin(a) * r;
-    if (Math.hypot(x, z) > mundo.raio - 3 || !mundo.livre(x, z, 0.8)) continue;
-    const rig = criarDuende();
-    rig.root.position.set(x, 0, z);
-    scene.add(rig.root);
-    const barra = new THREE.Group();
-    barra.add(new THREE.Mesh(geoBarra, matBarraFundo));
-    const fill = new THREE.Mesh(geoBarraFill, matBarraVida);
-    fill.position.set(-0.38, 0, 0.001);
-    barra.add(fill);
-    barra.renderOrder = 10;
-    scene.add(barra);
-    duendes.push({
-      rig,
-      pos: rig.root.position,
-      hp: DUENDE.vida,
-      hpMax: DUENDE.vida,
-      velocidade: DUENDE.velocidade * REGRAS.escalaVelocidade * aleatorio(0.9, 1.05),
-      dir: 0,
-      andar: 0,
-      recarga: aleatorio(0.4, 1.0),
-      ataqueT: -1,
-      acertou: false,
-      flash: 0,
-      empurrao: new THREE.Vector3(),
-      desvio: aleatorio(-0.6, 0.6),
-      morto: false,
-      mortoT: 0,
-      raio: 0.4,
-      barra,
-      fill,
-    });
-    criados++;
-    tmp.set(x, 0.5, z);
-    particulas.emitir(tmp, 0x5dff6a, 24, { vel: 3, vida: 0.8, subir: 1.5 });
-    return;
+    if (Math.hypot(x, z) > mundo.raio - 3 || !mundo.livre(x, z, folga)) continue;
+    return { x, z };
   }
+  return null;
+}
+
+function criarInimigo(cfg, rig, x, z) {
+  rig.root.position.set(x, 0, z);
+  scene.add(rig.root);
+  const barra = new THREE.Group();
+  barra.add(new THREE.Mesh(geoBarra, matBarraFundo));
+  const fill = new THREE.Mesh(geoBarraFill, matBarraVida);
+  fill.position.set(-0.38, 0, 0.001);
+  barra.add(fill);
+  barra.renderOrder = 10;
+  barra.visible = cfg !== CHEFAO; // o chefão usa a barra grande do HUD
+  scene.add(barra);
+  const inimigo = {
+    cfg,
+    rig,
+    pos: rig.root.position,
+    hp: cfg.vida,
+    hpMax: cfg.vida,
+    velocidade: cfg.velocidade * REGRAS.escalaVelocidade * (cfg === CHEFAO ? 1 : aleatorio(0.9, 1.05)),
+    dir: Math.atan2(jogador.pos.x - x, jogador.pos.z - z),
+    andar: 0,
+    recarga: aleatorio(0.4, 1.0),
+    ataqueT: -1,
+    acertou: false,
+    flash: 0,
+    empurrao: new THREE.Vector3(),
+    desvio: cfg === CHEFAO ? 0 : aleatorio(-0.6, 0.6),
+    morto: false,
+    mortoT: 0,
+    raio: cfg.raio,
+    barra,
+    fill,
+  };
+  duendes.push(inimigo);
+  return inimigo;
+}
+
+function surgirDuende() {
+  const p = pontoDeSurgimento(16, 28, 0.8);
+  if (!p) return;
+  criarInimigo(DUENDE, criarDuende(), p.x, p.z);
+  criados++;
+  tmp.set(p.x, 0.5, p.z);
+  particulas.emitir(tmp, 0x5dff6a, 24, { vel: 3, vida: 0.8, subir: 1.5 });
+}
+
+function surgirChefao() {
+  const p = pontoDeSurgimento(12, 18, 1.5) || pontoDeSurgimento(6, 30, 1.2) || { x: 0, z: 0 };
+  chefao = criarInimigo(CHEFAO, criarChefao(), p.x, p.z);
+  chefao.recarga = 1.5;
+  // círculo vermelho que mostra onde o golpe vai cair
+  chefao.aviso = new THREE.Mesh(
+    new THREE.RingGeometry(0.2, CHEFAO.alcance + 0.3, 40).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0xff2a1a, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending })
+  );
+  chefao.aviso.position.y = 0.03;
+  scene.add(chefao.aviso);
+  tmp.set(p.x, 1, p.z);
+  particulas.emitir(tmp, 0x4cff3a, 80, { vel: 6, vida: 1.4, subir: 2 });
+  tremor = 0.6;
+  $('boss-name').textContent = CHEFAO.nome;
+  $('boss-bar').classList.remove('hidden');
+  atualizarHUD();
+  mostrarAviso(`O ${CHEFAO.nome} apareceu!`);
+}
+
+function mostrarAviso(texto) {
+  const el = $('banner');
+  el.textContent = texto;
+  el.classList.remove('hidden', 'mostra');
+  void el.offsetWidth;
+  el.classList.add('mostra');
 }
 
 function removerDuende(d) {
   scene.remove(d.rig.root);
   scene.remove(d.barra);
+  if (d.aviso) scene.remove(d.aviso);
   d.rig.pele.dispose();
 }
 
@@ -285,20 +336,34 @@ function danoDuende(d, dano, origem) {
   if (d.morto) return;
   d.hp -= dano;
   d.flash = 0.15;
-  tmp.subVectors(d.pos, origem).setY(0).normalize().multiplyScalar(7);
+  tmp.subVectors(d.pos, origem).setY(0).normalize().multiplyScalar(7 * d.cfg.empurrao);
   d.empurrao.copy(tmp);
-  d.ataqueT = -1; // interrompe o ataque
-  d.recarga = Math.max(d.recarga, 0.5);
-  tmp.copy(d.pos).setY(1.2);
+  if (d.cfg.interrompivel) {
+    d.ataqueT = -1; // interrompe o ataque
+    d.recarga = Math.max(d.recarga, 0.5);
+  }
+  tmp.copy(d.pos).setY(d.cfg.alturaAcerto + 0.5);
   numeros.mostrar(tmp, dano, 'inimigo');
+  if (d === chefao) atualizarHUD();
   particulas.emitir(tmp, 0xff4433, 14, { vel: 4, vida: 0.5, gravidade: 9 });
   if (d.hp <= 0) {
     d.morto = true;
     d.barra.visible = false;
+    if (d.aviso) d.aviso.visible = false;
+    if (d === chefao) {
+      particulas.emitir(tmp, 0x8cff6a, 90, { vel: 6, vida: 1.6, subir: 2 });
+      tremor = 0.5;
+      timerFim = 2.4;
+      atualizarHUD();
+      return;
+    }
     mortos++;
     particulas.emitir(tmp, 0x8cff6a, 30, { vel: 3.5, vida: 1, subir: 1 });
     atualizarHUD();
-    if (mortos >= total) timerFim = 1.4;
+    if (mortos >= total) {
+      timerChefao = CHEFAO.atrasoSurgimento;
+      mostrarAviso('O chão treme... algo grande se aproxima!');
+    }
   }
 }
 
@@ -309,6 +374,10 @@ function atualizarDuendes(dt, t) {
   if (estado === 'jogando' && jogador.vivo && criados < total && vivos < maxVivos && timerSurgir <= 0) {
     surgirDuende();
     timerSurgir = REGRAS.intervaloSurgimento;
+  }
+  if (timerChefao > 0 && estado === 'jogando' && jogador.vivo) {
+    timerChefao -= dt;
+    if (timerChefao <= 0) surgirChefao();
   }
 
   for (let i = duendes.length - 1; i >= 0; i--) {
@@ -326,6 +395,7 @@ function atualizarDuendes(dt, t) {
       continue;
     }
 
+    const cfg = d.cfg;
     const dist = distXZ(d.pos, jogador.pos);
     const alvoAng = Math.atan2(jogador.pos.x - d.pos.x, jogador.pos.z - d.pos.z);
     let movendo = 0;
@@ -333,25 +403,32 @@ function atualizarDuendes(dt, t) {
 
     if (d.ataqueT >= 0) {
       d.ataqueT += dt;
-      if (!d.acertou && d.ataqueT >= 0.55) {
+      if (!d.acertou && d.ataqueT >= cfg.preparo) {
         d.acertou = true;
-        if (jogador.vivo && dist < DUENDE.alcance + 0.35) {
-          danoJogador(calcularDano(pontosDeAtaque(DUENDE, DUENDE.atributoAtaque), jogador.cls.defesa), d.pos);
+        if (jogador.vivo && dist < cfg.alcance + 0.35) {
+          danoJogador(calcularDano(pontosDeAtaque(cfg, cfg.atributoAtaque), jogador.cls.defesa), d.pos);
+        }
+        if (d === chefao) {
+          // impacto no chão
+          tmp.set(d.pos.x + Math.sin(d.dir) * 1.6, 0.2, d.pos.z + Math.cos(d.dir) * 1.6);
+          particulas.emitir(tmp, 0xb59a6a, 40, { vel: 6, vida: 0.8, gravidade: 8, subir: 2 });
+          tremor = Math.max(tremor, 0.35);
         }
       }
-      if (d.ataqueT >= 0.85) d.ataqueT = -1;
-    } else if (jogador.vivo && dist < DUENDE.alcance && d.recarga <= 0) {
+      if (d.ataqueT >= cfg.duracaoAtaque) d.ataqueT = -1;
+    } else if (jogador.vivo && dist < cfg.alcance && d.recarga <= 0) {
       d.ataqueT = 0;
       d.acertou = false;
-      d.recarga = DUENDE.recarga + aleatorio(0, 0.5);
-    } else if (jogador.vivo && dist > DUENDE.alcance * 0.8) {
+      d.recarga = cfg.recarga + aleatorio(0, 0.5);
+    } else if (jogador.vivo && dist > cfg.alcance * 0.8) {
       // persegue o jogador, com um pequeno desvio para cercá-lo
       const ang = alvoAng + d.desvio * Math.min(1, dist / 10);
       d.pos.x += Math.sin(ang) * d.velocidade * dt;
       d.pos.z += Math.cos(ang) * d.velocidade * dt;
       movendo = 1;
     }
-    d.dir = girarPara(d.dir, alvoAng, dt * 10);
+    // o chefão não consegue se virar enquanto desce a clava
+    if (!(d === chefao && d.ataqueT >= 0)) d.dir = girarPara(d.dir, alvoAng, dt * (d === chefao ? 4 : 10));
 
     // empurrão ao ser atingido
     d.pos.addScaledVector(d.empurrao, dt);
@@ -362,8 +439,9 @@ function atualizarDuendes(dt, t) {
       if (o === d || o.morto) continue;
       const dx = d.pos.x - o.pos.x, dz = d.pos.z - o.pos.z;
       const d2 = dx * dx + dz * dz;
-      if (d2 < 0.81 && d2 > 1e-6) {
-        const k = (0.9 - Math.sqrt(d2)) * 0.5 / Math.sqrt(d2);
+      const min = d.raio + o.raio + 0.1;
+      if (d2 < min * min && d2 > 1e-6) {
+        const k = (min - Math.sqrt(d2)) * (d === chefao ? 0.05 : 0.5) / Math.sqrt(d2);
         d.pos.x += dx * k;
         d.pos.z += dz * k;
       }
@@ -378,13 +456,18 @@ function atualizarDuendes(dt, t) {
 
     d.andar += (movendo - d.andar) * Math.min(1, dt * 10);
     rig.root.rotation.y = d.dir;
-    const prog = d.ataqueT >= 0 ? d.ataqueT / 0.85 : -1;
+    const prog = d.ataqueT >= 0 ? d.ataqueT / cfg.duracaoAtaque : -1;
     animarRig(rig, dt, t, d.andar, prog);
 
     // pisca ao ser atingido
     d.flash = Math.max(0, d.flash - dt);
     rig.pele.emissive.setRGB(d.flash > 0 ? 1 : 0, d.flash > 0 ? 0.25 : 0, d.flash > 0 ? 0.2 : 0);
 
+    if (d.aviso) {
+      const preparando = d.ataqueT >= 0 && d.ataqueT < cfg.preparo;
+      d.aviso.position.set(d.pos.x, 0.03, d.pos.z);
+      d.aviso.material.opacity = preparando ? 0.15 + (d.ataqueT / cfg.preparo) * 0.45 : 0;
+    }
     d.barra.position.set(d.pos.x, 1.65, d.pos.z);
     d.barra.quaternion.copy(camera.quaternion);
     d.fill.scale.x = Math.max(0.001, d.hp / d.hpMax);
@@ -426,7 +509,7 @@ function golpeCorpoACorpo() {
     if (dist > atk.alcance + d.raio) continue;
     const ang = Math.atan2(d.pos.x - jogador.pos.x, d.pos.z - jogador.pos.z);
     if (dist > 0.8 && Math.abs(difAngulo(jogador.dir, ang)) > atk.arco / 2) continue;
-    danoDuende(d, calcularDano(pontosDeAtaque(jogador.cls, atk.atributo), DUENDE.defesa), jogador.pos);
+    danoDuende(d, calcularDano(pontosDeAtaque(jogador.cls, atk.atributo), d.cfg.defesa), jogador.pos);
   }
 }
 
@@ -456,7 +539,7 @@ function atualizarProjeteis(dt) {
     p.vida -= dt;
     // persegue suavemente o alvo
     if (p.alvo && !p.alvo.morto) {
-      tmp.set(p.alvo.pos.x, 0.8, p.alvo.pos.z).sub(p.malha.position).normalize().multiplyScalar(atk.velocidadeProjetil);
+      tmp.set(p.alvo.pos.x, p.alvo.cfg.alturaAcerto, p.alvo.pos.z).sub(p.malha.position).normalize().multiplyScalar(atk.velocidadeProjetil);
       p.vel.lerp(tmp, Math.min(1, dt * 8));
     } else {
       p.vel.y += (0.9 - p.malha.position.y) * dt * 4;
@@ -467,9 +550,9 @@ function atualizarProjeteis(dt) {
     let explodiu = p.vida <= 0;
     for (const d of duendes) {
       if (d.morto) continue;
-      tmp2.set(d.pos.x, 0.7, d.pos.z);
-      if (tmp2.distanceTo(p.malha.position) < 0.75) {
-        danoDuende(d, calcularDano(pontosDeAtaque(jogador.cls, atk.atributo), DUENDE.defesa), p.malha.position);
+      tmp2.set(d.pos.x, d.cfg.alturaAcerto, d.pos.z);
+      if (tmp2.distanceTo(p.malha.position) < d.raio + 0.35) {
+        danoDuende(d, calcularDano(pontosDeAtaque(jogador.cls, atk.atributo), d.cfg.defesa), p.malha.position);
         explodiu = true;
         break;
       }

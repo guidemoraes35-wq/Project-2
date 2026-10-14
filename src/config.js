@@ -55,6 +55,31 @@ export const DUENDE = {
   atributoAtaque: 'poder',
   alcance: 1.45,
   recarga: 1.3,
+  preparo: 0.55,      // segundos entre erguer a clava e acertar
+  duracaoAtaque: 0.85,
+  raio: 0.4,
+  empurrao: 1,        // quanto é empurrado ao ser atingido
+  interrompivel: true, // levar dano cancela o ataque
+  alturaAcerto: 0.7,
+};
+
+export const CHEFAO = {
+  nome: 'Chefão Duende',
+  vida: 200,
+  poder: 40,
+  velocidade: 10,
+  defesa: 50,
+  inteligencia: 0,
+  atributoAtaque: 'poder',
+  alcance: 2.6,
+  recarga: 1.6,
+  preparo: 0.95,
+  duracaoAtaque: 1.4,
+  raio: 0.95,
+  empurrao: 0.12,
+  interrompivel: false,
+  alturaAcerto: 1.4,
+  atrasoSurgimento: 2.5, // segundos após o último duende cair
 };
 
 export const ATRIBUTOS = [
