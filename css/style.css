@@ -255,8 +255,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .card-icone { font-size: 26px; }
 .card h2 { font-family: var(--fonte-titulo); margin: 0; font-size: 22px; color: var(--ouro); }
 .card-desc { margin: 6px 0 10px; font-size: 13px; color: var(--texto-suave); line-height: 1.35; }
+.card-ataque { margin: 0 0 8px; font-size: 12px; color: var(--texto-suave); }
+.card-ataque b { color: var(--ouro); }
 .stats { display: grid; gap: 5px; }
-.stat { display: grid; grid-template-columns: 82px 1fr 24px; align-items: center; gap: 8px; font-size: 12px; }
+.stat { display: grid; grid-template-columns: 82px 1fr 30px; align-items: center; gap: 8px; font-size: 12px; }
 .stat-nome { color: var(--texto-suave); }
 .stat-barra { height: 7px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; }
 .stat-barra span { display: block; height: 100%; background: linear-gradient(90deg, var(--ouro-escuro), var(--ouro)); border-radius: 4px; }
@@ -301,7 +303,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .card { padding: 10px; }
   .card-desc { display: none; }
   .card h2 { font-size: 18px; }
-  .stat { grid-template-columns: 1fr 22px; gap: 2px 6px; font-size: 11px; }
+  .stat { grid-template-columns: 1fr 30px; gap: 2px 6px; font-size: 11px; }
   .stat-barra { grid-column: 1 / -1; grid-row: 2; }
   .botao-principal { font-size: 16px; padding: 12px 18px; }
   #joystick { width: 120px; height: 120px; left: calc(20px + var(--sae)); bottom: calc(24px + var(--sab)); }

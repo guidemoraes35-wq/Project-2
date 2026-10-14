@@ -6,13 +6,14 @@ export const CLASSES = {
     nome: 'Assassino',
     descricao: 'Rápido e letal. Golpeia com adagas gêmeas a curta distância.',
     icone: '🗡️',
-    vida: 20,
+    vida: 100,
     poder: 30,
     velocidade: 35,
     defesa: 10,
     inteligencia: 15,
     ataque: {
       tipo: 'fisico',
+      atributo: 'poder', // 1 ponto de Poder = 1 ponto de ataque
       recarga: 0.42,   // segundos entre ataques
       duracao: 0.35,   // duração da animação
       acerto: 0.12,    // momento em que o golpe acerta
@@ -26,13 +27,14 @@ export const CLASSES = {
     nome: 'Maga',
     descricao: 'Domina a magia arcana. Lança orbes mágicos à distância.',
     icone: '🔮',
-    vida: 30,
+    vida: 150,
     poder: 10,
     velocidade: 20,
     defesa: 20,
     inteligencia: 40,
     ataque: {
       tipo: 'magico',
+      atributo: 'inteligencia', // 1 ponto de Inteligência = 1 ponto de ataque
       recarga: 0.75,
       duracao: 0.5,
       acerto: 0.22,
@@ -45,17 +47,18 @@ export const CLASSES = {
 
 export const DUENDE = {
   nome: 'Duende',
-  vida: 10,
+  vida: 50,
   poder: 10,
   velocidade: 20,
   defesa: 10,
   inteligencia: 0,
+  atributoAtaque: 'poder',
   alcance: 1.45,
   recarga: 1.3,
 };
 
 export const ATRIBUTOS = [
-  { chave: 'vida', nome: 'Vida', max: 40 },
+  { chave: 'vida', nome: 'Vida', max: 200 },
   { chave: 'poder', nome: 'Poder', max: 40 },
   { chave: 'velocidade', nome: 'Velocidade', max: 40 },
   { chave: 'defesa', nome: 'Defesa', max: 40 },
@@ -73,9 +76,16 @@ export const REGRAS = {
   invulnerabilidade: 0.45, // segundos sem receber dano após ser atingido
 };
 
+// Cada ataque usa um atributo: 1 ponto de Poder ou de Inteligência = 1 ponto de ataque.
 // Dano = ataque² / (ataque + defesa). Quanto maior a defesa, menor o dano.
-// Ataques físicos usam o Poder; ataques mágicos usam a Inteligência.
 export function calcularDano(ataque, defesa) {
   if (ataque <= 0) return 0;
   return Math.max(1, Math.round((ataque * ataque) / (ataque + defesa)));
+}
+
+export const NOMES_ATRIBUTO = { poder: 'Poder', inteligencia: 'Inteligência' };
+
+/** Pontos de ataque de um personagem: o valor do atributo que o ataque usa. */
+export function pontosDeAtaque(personagem, atributo) {
+  return personagem[atributo];
 }

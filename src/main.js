@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CLASSES, DUENDE, ATRIBUTOS, REGRAS, calcularDano } from './config.js';
+import { CLASSES, DUENDE, ATRIBUTOS, REGRAS, NOMES_ATRIBUTO, calcularDano, pontosDeAtaque } from './config.js';
 import { Input } from './input.js';
 import { criarMundo, texturaBrilho } from './world.js';
 import { criarAssassino, criarMaga, criarDuende, animarRig } from './models.js';
@@ -109,6 +109,7 @@ function montarCartas() {
     carta.innerHTML = `
       <div class="card-topo"><span class="card-icone">${cls.icone}</span><h2>${cls.nome}</h2></div>
       <p class="card-desc">${cls.descricao}</p>
+      <p class="card-ataque">Ataque: <b>${NOMES_ATRIBUTO[cls.ataque.atributo]}</b> (${cls[cls.ataque.atributo]} pontos)</p>
       <div class="stats">${barras}</div>`;
     carta.addEventListener('click', () => selecionarClasse(cls.id));
     cont.appendChild(carta);
@@ -335,7 +336,7 @@ function atualizarDuendes(dt, t) {
       if (!d.acertou && d.ataqueT >= 0.55) {
         d.acertou = true;
         if (jogador.vivo && dist < DUENDE.alcance + 0.35) {
-          danoJogador(calcularDano(DUENDE.poder, jogador.cls.defesa), d.pos);
+          danoJogador(calcularDano(pontosDeAtaque(DUENDE, DUENDE.atributoAtaque), jogador.cls.defesa), d.pos);
         }
       }
       if (d.ataqueT >= 0.85) d.ataqueT = -1;
@@ -425,7 +426,7 @@ function golpeCorpoACorpo() {
     if (dist > atk.alcance + d.raio) continue;
     const ang = Math.atan2(d.pos.x - jogador.pos.x, d.pos.z - jogador.pos.z);
     if (dist > 0.8 && Math.abs(difAngulo(jogador.dir, ang)) > atk.arco / 2) continue;
-    danoDuende(d, calcularDano(jogador.cls.poder, DUENDE.defesa), jogador.pos);
+    danoDuende(d, calcularDano(pontosDeAtaque(jogador.cls, atk.atributo), DUENDE.defesa), jogador.pos);
   }
 }
 
@@ -468,7 +469,7 @@ function atualizarProjeteis(dt) {
       if (d.morto) continue;
       tmp2.set(d.pos.x, 0.7, d.pos.z);
       if (tmp2.distanceTo(p.malha.position) < 0.75) {
-        danoDuende(d, calcularDano(jogador.cls.inteligencia, DUENDE.defesa), p.malha.position);
+        danoDuende(d, calcularDano(pontosDeAtaque(jogador.cls, atk.atributo), DUENDE.defesa), p.malha.position);
         explodiu = true;
         break;
       }
