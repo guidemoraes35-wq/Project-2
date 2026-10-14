@@ -705,17 +705,52 @@ function pontosNaEsfera(n) {
   return pts;
 }
 
-/** Cabelo cacheado: uma calota e vários cachos redondos, deixando o rosto livre. */
-function cabeloCacheado(cabeca, R, mat, { volume, tamCacho, centro }) {
-  cabeca.add(parte(G.esfera, mat, { p: centro, s: [R * volume, R * volume * 0.96, R * volume * 0.95] }));
-  for (const d of pontosNaEsfera(volume > 1.2 ? 70 : 46)) {
-    if (d.y < (volume > 1.2 ? -0.55 : -0.05)) continue;   // nuca
-    if (d.z > 0.3 && d.y < 0.5) continue;                 // rosto
-    if (volume <= 1.2 && Math.abs(d.x) > 0.75 && d.y < 0.2) continue; // orelhas
-    const r = R * volume;
+/** Cabelo crespo curto (menino): calota rente à cabeça coberta de cachinhos, sem tocar o rosto. */
+function cabeloCrespoCurto(cabeca, R, mat) {
+  cabeca.add(parte(new THREE.SphereGeometry(R * 1.06, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.55), mat, { p: [0, 0.02, -0.01], r: [-0.45, 0, 0] }));
+  for (const d of pontosNaEsfera(60)) {
+    if (d.y < 0.05) continue;               // só a parte de cima
+    if (d.z > 0.55 && d.y < 0.75) continue; // testa livre
+    const r = R * 1.08;
+    // gira os pontos como a calota (-0.45 rad em x)
+    const y = d.y * Math.cos(-0.45) - d.z * Math.sin(-0.45);
+    const z = d.y * Math.sin(-0.45) + d.z * Math.cos(-0.45);
+    cabeca.add(parte(G.esferaB, mat, { p: [d.x * r, 0.02 + y * r, -0.01 + z * r], s: 0.045, sombra: false, contorno: false }));
+  }
+}
+
+/**
+ * Black power (menina africana): volume redondo atrás e acima da cabeça, com a linha
+ * do cabelo bem desenhada na testa, faixa colorida em tons africanos e brincos de argola.
+ */
+function cabeloAfro(cabeca, R, mat) {
+  // calota rente à cabeça: a linha do cabelo fica acima da testa
+  cabeca.add(parte(new THREE.SphereGeometry(R * 1.05, 22, 14, 0, Math.PI * 2, 0, Math.PI * 0.5), mat, { p: [0, 0.025, -0.01], r: [-0.55, 0, 0] }));
+  // volume principal, todo atrás do rosto
+  const c = [0, 0.13, -0.12];
+  const rx = 0.32, ry = 0.29, rz = 0.28;
+  cabeca.add(parte(G.esfera, mat, { p: c, s: [rx, ry, rz] }));
+  for (const d of pontosNaEsfera(90)) {
+    if (d.z > 0.2 && d.y < 0.6) continue; // nada na frente do rosto
+    if (d.y < -0.7) continue;
     cabeca.add(parte(G.esferaB, mat, {
-      p: [centro[0] + d.x * r, centro[1] + d.y * r * 0.96, centro[2] + d.z * r * 0.95], s: tamCacho, sombra: false,
+      p: [c[0] + d.x * rx, c[1] + d.y * ry, c[2] + d.z * rz], s: 0.065 + (Math.abs(d.x) * 0.012), sombra: false,
     }));
+  }
+  // faixa de tecido estampado (amarelo, vermelho e verde) passando sobre a cabeça
+  const cores = [0xf2b51c, 0xc8282e, 0x2a8a3a];
+  cores.forEach((cor, i) => {
+    cabeca.add(parte(new THREE.TorusGeometry(0.285 + i * 0.006, 0.024, 8, 30, Math.PI), toon(cor), {
+      p: [0, 0.05, 0.13 - i * 0.045], r: [-0.22, 0, 0], contorno: false,
+    }));
+  });
+  // nó da faixa ao lado
+  cabeca.add(parte(G.esfera, toon(0xc8282e), { p: [0.28, 0.13, 0.02], s: [0.05, 0.065, 0.045], r: [0, 0, -0.5] }));
+  cabeca.add(parte(G.esfera, toon(0xf2b51c), { p: [0.3, 0.06, 0.0], s: [0.035, 0.06, 0.03], r: [0.2, 0, -0.9] }));
+  // brincos de argola dourados
+  const ouro = toon(0xf0c040, { emissive: 0x5a4010, emissiveIntensity: 0.4 });
+  for (const x of [R * 1.0, -R * 1.0]) {
+    cabeca.add(parte(new THREE.TorusGeometry(0.032, 0.007, 6, 16), ouro, { p: [x, -0.1, 0.0], r: [0, Math.PI / 2, 0], contorno: false, sombra: false }));
   }
 }
 
@@ -778,11 +813,14 @@ function criarEscudo(corFrente, corFaixa, metal, madeira) {
  * Personagem definitivo do jogador, montado na tela de criação.
  * op: { genero: 'menino' | 'menina', aparencia, roupa (de config.js), item: 'espada' | 'vara' | 'escudo' | null }
  */
-export function criarHeroi({ genero, aparencia, roupa, item = null }) {
+export function criarHeroi({ genero, aparencia, roupa, item = null, itens = null }) {
   const rig = baseRig('heroi');
   const { corpo } = rig;
   const menina = genero === 'menina';
-  rig.item = item;
+  // até dois itens: o escudo vai no braço esquerdo; espada e vara preferem a mão direita
+  const lista = (itens || (item ? [item] : [])).slice(0, 2);
+  rig.maoD = lista.find((i) => i !== 'escudo') || null;
+  rig.maoE = lista.find((i) => i !== rig.maoD) || null;
   const pele = toon(aparencia.pele);
   const cabelo = toon(aparencia.cabelo);
   const principal = toon(roupa.principal);
@@ -847,7 +885,7 @@ export function criarHeroi({ genero, aparencia, roupa, item = null }) {
     for (const x of [0.088, -0.088]) {
       cabeca.add(parte(G.capsula(0.011, 0.055), cilio, { p: [x * 1.12, aparencia.olhosPuxados ? 0.04 : 0.055, R * 0.86], r: [0, 0, Math.PI / 2 + (x > 0 ? -0.2 : 0.2)], contorno: false, sombra: false }));
     }
-    const rubor = toon(0xff9a9a);
+    const rubor = aparencia.cacheado ? toon(0xb8564e) : toon(0xff9a9a);
     cabeca.add(parte(G.esferaB, rubor, { p: [0.14, -0.07, R * 0.78], s: [0.04, 0.022, 0.01], r: [0, 0.5, 0], contorno: false, sombra: false }));
     cabeca.add(parte(G.esferaB, rubor, { p: [-0.14, -0.07, R * 0.78], s: [0.04, 0.022, 0.01], r: [0, -0.5, 0], contorno: false, sombra: false }));
   }
@@ -857,11 +895,15 @@ export function criarHeroi({ genero, aparencia, roupa, item = null }) {
   const corNariz = new THREE.Color(aparencia.pele).multiplyScalar(0.88).getHex();
   cabeca.add(parte(G.esferaB, toon(corNariz), { p: [0, -0.04, R * 0.97], s: 0.024, contorno: false, sombra: false }));
   cabeca.add(parte(new THREE.TorusGeometry(0.036, 0.009, 6, 12, Math.PI), toon(0x7a2e3a), { p: [0, -0.1, R * 0.9], r: [0, 0, Math.PI], contorno: false, sombra: false }));
+  if (menina && aparencia.cacheado) {
+    // lábios mais cheios
+    cabeca.add(parte(G.esferaB, toon(0x8e3a3a), { p: [0, -0.112, R * 0.9], s: [0.034, 0.013, 0.012], contorno: false, sombra: false }));
+  }
 
   // cabelo
   if (aparencia.cacheado) {
-    if (menina) cabeloCacheado(cabeca, R, cabelo, { volume: 1.38, tamCacho: 0.085, centro: [0, 0.06, -0.06] });
-    else cabeloCacheado(cabeca, R, cabelo, { volume: 1.04, tamCacho: 0.05, centro: [0, 0.03, -0.03] });
+    if (menina) cabeloAfro(cabeca, R, cabelo);
+    else cabeloCrespoCurto(cabeca, R, cabelo);
   } else {
     cabeca.add(parte(new THREE.SphereGeometry(R * 1.08, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.55), cabelo, { p: [0, 0.015, -0.01], r: [-0.4, 0, 0] }));
     cabeca.add(parte(G.esfera, cabelo, { p: [0, 0.01, -0.06], s: [R * 1.06, R * 1.04, R * 0.98] }));
@@ -897,14 +939,140 @@ export function criarHeroi({ genero, aparencia, roupa, item = null }) {
     if (menina) b.pivo.add(parte(G.cil(0.06, 0.1, 0.16, 14, true), principalDupla, { p: [0, -0.06, 0] }));
   }
 
-  // item de presente
-  if (item === 'espada') bd.mao.add(criarEspada(metal, ouro, couro));
-  else if (item === 'vara') bd.mao.add(criarVara(couro, metal));
-  else if (item === 'escudo') be.pivo.userData.cotovelo.add(criarEscudo(roupa.principal, roupa.detalhe, metal, toon(0x7a5230)));
+  // itens nas mãos
+  const montar = (id, b) => {
+    if (id === 'espada') b.mao.add(criarEspada(metal, ouro, couro));
+    else if (id === 'vara') b.mao.add(criarVara(couro, metal));
+    else if (id === 'escudo') b.pivo.userData.cotovelo.add(criarEscudo(roupa.principal, roupa.detalhe, metal, toon(0x7a5230)));
+  };
+  montar(rig.maoD, bd);
+  montar(rig.maoE, be);
 
   rig.bracoE = be.pivo;
   rig.bracoD = bd.pivo;
   corpo.add(rig.bracoE, rig.bracoD);
+  return rig;
+}
+
+// ------------------------------------------------------------------------ Gnomos
+/**
+ * Gnomo do vilarejo: pequeno, chapéu de cone vermelho, roupa azul ou verde e barba
+ * branca cheia. `arma`: 'espada' (espadinha) ou 'magia' (pedra de terra na mão).
+ * O Gnomo Chefe (`chefe: true`) é maior, usa coroa em vez do chapéu pontudo,
+ * manto roxo, barba até a barriga e um cajado de raiz.
+ */
+export function criarGnomo({ roupa = 'azul', arma = 'espada', chefe = false } = {}) {
+  const rig = baseRig(chefe ? 'gnomoChefe' : 'gnomo');
+  rig.arma = arma;
+  const { corpo } = rig;
+  const pele = toon(0xf4c4a2, { emissive: 0x000000 }, true);
+  rig.pele = pele;
+  const corRoupa = chefe ? 0x6a3bb5 : roupa === 'azul' ? 0x2f62c4 : 0x2f8d3c;
+  const tunica = toon(corRoupa);
+  const calca = toon(new THREE.Color(corRoupa).multiplyScalar(0.55).getHex());
+  const branco = toon(0xf6f4ee);
+  const bota = toon(0x5a3a20);
+  const cinto = toon(0x3d2614);
+  const ouro = toon(0xf0c040, { emissive: 0x5a4010, emissiveIntensity: 0.35 });
+
+  // pernas curtas e botas pontudas
+  rig.pernaE = perna(0.08, 0.3, 0.3, 0.05, calca, bota, 0.8);
+  rig.pernaD = perna(-0.08, 0.3, 0.3, 0.05, calca, bota, 0.8);
+  corpo.add(rig.pernaE, rig.pernaD);
+
+  // corpo redondinho: túnica (no chefe, manto até o chão), cinto e fivela dourada
+  if (chefe) {
+    rig.saia = grupo(0, 0.5, 0);
+    rig.saia.add(parte(G.torno([[0, -0.5], [0.3, -0.5], [0.27, -0.3], [0.23, 0], [0, 0]], 18), tunica));
+    rig.saia.add(parte(G.toro(0.295, 0.022), ouro, { p: [0, -0.48, 0], r: [Math.PI / 2, 0, 0], contorno: false }));
+    corpo.add(rig.saia);
+  }
+  corpo.add(parte(G.torno([[0, 0], [0.22, 0], [0.25, 0.1], [0.24, 0.24], [0.19, 0.36], [0.1, 0.42], [0, 0.43]]), tunica, { p: [0, 0.24, 0] }));
+  corpo.add(parte(G.toro(0.24, 0.028), cinto, { p: [0, 0.37, 0], r: [Math.PI / 2, 0, 0] }));
+  corpo.add(parte(new THREE.BoxGeometry(0.07, 0.06, 0.03), ouro, { p: [0, 0.37, 0.245], contorno: false }));
+
+  // cabeça: nariz de batata, bochechas rosadas e barba branca cheia
+  const R = 0.17;
+  const cabeca = grupo(0, 0.82, 0.01);
+  cabeca.add(parte(G.esfera, pele, { s: [R, R * 1.0, R * 0.95] }));
+  for (const x of [R * 0.98, -R * 0.98]) cabeca.add(parte(G.esfera, pele, { p: [x, 0.0, -0.01], s: [0.035, 0.05, 0.03] }));
+  cabeca.add(parte(G.esfera, toon(0xf0a088), { p: [0, -0.02, R * 0.98], s: [0.05, 0.045, 0.045] }));
+  cabeca.add(olho(R, 0.06, 0.035, 0.032, 0x3a6ad0));
+  cabeca.add(olho(R, -0.06, 0.035, 0.032, 0x3a6ad0));
+  cabeca.add(sobrancelha(0.062, 0.085, R * 0.9, 0.05, -0.15, branco));
+  cabeca.add(sobrancelha(-0.062, 0.085, R * 0.9, 0.05, 0.15, branco));
+  const rubor = toon(0xff8a8a);
+  cabeca.add(parte(G.esferaB, rubor, { p: [0.1, -0.02, R * 0.8], s: [0.03, 0.018, 0.01], r: [0, 0.6, 0], contorno: false, sombra: false }));
+  cabeca.add(parte(G.esferaB, rubor, { p: [-0.1, -0.02, R * 0.8], s: [0.03, 0.018, 0.01], r: [0, -0.6, 0], contorno: false, sombra: false }));
+  // barba: cobre queixo, bochechas e desce pelo peito; bigode volumoso
+  const barba = grupo(0, -0.04, 0.06);
+  const comp = chefe ? 1.45 : 1;
+  barba.add(parte(G.esfera, branco, { p: [0, -0.07, 0.02], s: [0.15, 0.13, 0.11] }));
+  barba.add(parte(G.esfera, branco, { p: [0, -0.17 * comp, 0.05], s: [0.13, 0.15 * comp, 0.09] }));
+  barba.add(parte(G.cone(0.08, 0.16 * comp, 10), branco, { p: [0, -0.33 * comp, 0.07], r: [Math.PI + 0.2, 0, 0] }));
+  for (const x of [0.11, -0.11]) barba.add(parte(G.esfera, branco, { p: [x, -0.02, -0.03], s: [0.06, 0.09, 0.07] }));
+  barba.add(parte(G.capsula(0.032, 0.07), branco, { p: [0.04, 0.025, 0.1], r: [0, 0, Math.PI / 2 + 0.35] }));
+  barba.add(parte(G.capsula(0.032, 0.07), branco, { p: [-0.04, 0.025, 0.1], r: [0, 0, Math.PI / 2 - 0.35] }));
+  cabeca.add(barba);
+  rig.barba = barba;
+
+  if (chefe) {
+    // cabelo branco nas laterais e coroa dourada (sem chapéu pontudo)
+    cabeca.add(parte(G.esfera, branco, { p: [0, -0.02, -0.06], s: [R * 1.05, R * 0.95, R * 0.9] }));
+    cabeca.add(parte(G.cil(0.15, 0.14, 0.08, 16, true), toon(0xf0c040, { emissive: 0x5a4010, emissiveIntensity: 0.35, side: THREE.DoubleSide }), { p: [0, 0.15, -0.01] }));
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      cabeca.add(parte(G.cone(0.03, 0.07, 6), ouro, { p: [Math.sin(a) * 0.145, 0.22, -0.01 + Math.cos(a) * 0.145] }));
+    }
+    cabeca.add(parte(G.esferaB, toon(0x3fd0a0, { emissive: 0x1a8a60, emissiveIntensity: 0.6 }), { p: [0, 0.155, 0.15], s: 0.022, contorno: false }));
+  } else {
+    // chapéu de cone vermelho com a ponta caída
+    const vermelho = toon(0xd02a26);
+    const chapeu = grupo(0, 0.08, -0.01);
+    chapeu.rotation.x = -0.12;
+    chapeu.add(parte(G.cil(0.15, 0.185, 0.05, 18), vermelho, { p: [0, 0.02, 0] }));
+    chapeu.add(parte(G.cil(0.07, 0.15, 0.26, 18), vermelho, { p: [0, 0.17, 0] }));
+    const ponta = grupo(0, 0.29, 0);
+    ponta.add(parte(G.cone(0.07, 0.24, 14), vermelho, { p: [0, 0.11, 0] }));
+    chapeu.add(ponta);
+    rig.chapeuPonta = ponta;
+    cabeca.add(chapeu);
+    // cabelo branco aparecendo atrás
+    cabeca.add(parte(G.esfera, branco, { p: [0, -0.03, -0.08], s: [R * 0.95, R * 0.8, R * 0.7] }));
+  }
+  corpo.add(cabeca);
+  rig.cabeca = cabeca;
+
+  // braços curtos e mãos de luva
+  const be = braco(0.22, 0.6, 0.3, 0.04, tunica, pele, 0.05);
+  const bd = braco(-0.22, 0.6, 0.3, 0.04, tunica, pele, 0.05);
+  if (chefe) {
+    const cajado = grupo(0, 0, 0.02);
+    cajado.add(parte(G.cil(0.022, 0.03, 1.15, 7), toon(0x6b4226), { p: [0, 0.2, 0] }));
+    cajado.add(parte(G.esferaB, toon(0x6b4226), { p: [0, 0.78, 0], s: [0.06, 0.05, 0.06] }));
+    const cristal = new THREE.Mesh(new THREE.OctahedronGeometry(0.06, 0), new THREE.MeshStandardMaterial({ color: 0x8fffc8, emissive: 0x2ad08a, emissiveIntensity: 1.6 }));
+    cristal.position.y = 0.86;
+    cajado.add(cristal);
+    rig.cristal = cristal;
+    bd.mao.add(cajado);
+  } else if (arma === 'espada') {
+    const g = criarEspada(toon(0xc8d2e0, { emissive: 0x2a3550, emissiveIntensity: 0.4 }), ouro, cinto);
+    g.scale.setScalar(0.55);
+    bd.mao.add(g);
+  } else {
+    // pedra de terra brilhante na mão: a fonte da magia
+    const pedra = new THREE.Mesh(
+      new THREE.DodecahedronGeometry(0.055, 0),
+      new THREE.MeshStandardMaterial({ color: 0xb08a4a, emissive: 0x6a4a10, emissiveIntensity: 1.2, flatShading: true })
+    );
+    pedra.position.set(0, -0.02, 0.05);
+    bd.mao.add(pedra);
+    rig.pedraMagia = pedra;
+  }
+  rig.bracoE = be.pivo;
+  rig.bracoD = bd.pivo;
+  corpo.add(rig.bracoE, rig.bracoD);
+  rig.root.scale.setScalar(chefe ? 1.25 : 1);
   return rig;
 }
 
@@ -926,30 +1094,52 @@ const suave = (x) => x * x * (3 - 2 * x);
  * @param andar     0..1 intensidade da caminhada
  * @param ataque    progresso do ataque 0..1, ou -1 se não estiver atacando
  */
+// comprimento de um passo (m) de cada personagem: o ciclo da caminhada acompanha o chão
+const PASSADA = { duende: 0.5, arqueiro: 0.5, assassino: 0.85, maga: 0.65, chefao: 1.25, heroi: 0.78, gnomo: 0.36, gnomoChefe: 0.42 };
+
 export function animarRig(rig, dt, t, andar, ataque = -1) {
-  const freq = { duende: 14, arqueiro: 14, assassino: 12, maga: 9, chefao: 6, heroi: 11 }[rig.tipo];
-  rig.fase += dt * freq * (0.4 + andar * 0.6);
-  const s = Math.sin(rig.fase);
-  const amp = rig.tipo === 'maga' ? 0.5 : 0.8;
+  // a fase avança pela distância realmente percorrida, então os pés não deslizam;
+  // a amplitude acompanha a velocidade real (encostado numa parede, ele para de andar)
+  const pos = rig.root.position;
+  if (!rig.ultimaPos) rig.ultimaPos = pos.clone();
+  let dist = Math.hypot(pos.x - rig.ultimaPos.x, pos.z - rig.ultimaPos.z);
+  rig.ultimaPos.copy(pos);
+  if (dist > 1) dist = 0; // teleporte
+  const passada = PASSADA[rig.tipo] * rig.root.scale.x;
+  rig.fase += (dist / passada) * Math.PI;
+  const vel = dt > 0 ? dist / dt : 0;
+  rig.vel = (rig.vel || 0) + (vel - (rig.vel || 0)) * Math.min(1, dt * 12);
+  andar *= Math.min(1, rig.vel / (passada * 1.6));
+  rig.andar = (rig.andar || 0) + (andar - (rig.andar || 0)) * Math.min(1, dt * 8);
+  andar = rig.andar;
+
+  const s = Math.sin(rig.fase), c = Math.cos(rig.fase);
+  const amp = rig.tipo === 'maga' ? 0.5 : 0.75;
 
   rig.pernaE.rotation.x = s * amp * andar;
   rig.pernaD.rotation.x = -s * amp * andar;
-  rig.bracoE.rotation.set(-s * 0.6 * andar, 0, 0.08);
-  rig.bracoD.rotation.set(s * 0.6 * andar, 0, -0.08);
-  rig.corpo.position.y = Math.abs(Math.cos(rig.fase)) * 0.06 * andar + Math.sin(t * 2.2) * 0.012;
-  // joelhos dobram quando a perna vai para trás; cotovelos levemente flexionados
+  // braços balançam ao contrário das pernas, cotovelo dobra mais quando o braço vai à frente
+  rig.bracoE.rotation.set(-s * 0.55 * andar, 0, 0.08 + 0.04 * andar);
+  rig.bracoD.rotation.set(s * 0.55 * andar, 0, -0.08 - 0.04 * andar);
+  // o corpo sobe na passagem da perna e desce no apoio (duas vezes por ciclo)
+  rig.corpo.position.y = (Math.abs(c) - 0.5) * 0.07 * andar + Math.sin(t * 2.2) * 0.012;
+  // o joelho dobra enquanto a perna avança no ar e fica quase reto no apoio
   const joelhoE = rig.pernaE.userData.joelho, joelhoD = rig.pernaD.userData.joelho;
-  if (joelhoE) joelhoE.rotation.x = 0.04 + Math.max(0, Math.sin(rig.fase + 0.7)) * 1.1 * andar;
-  if (joelhoD) joelhoD.rotation.x = 0.04 + Math.max(0, -Math.sin(rig.fase + 0.7)) * 1.1 * andar;
+  if (joelhoE) joelhoE.rotation.x = 0.06 + Math.max(0, c) ** 1.5 * 1.15 * andar + Math.max(0, -s) * 0.15 * andar;
+  if (joelhoD) joelhoD.rotation.x = 0.06 + Math.max(0, -c) ** 1.5 * 1.15 * andar + Math.max(0, s) * 0.15 * andar;
   const cotE = rig.bracoE.userData.cotovelo, cotD = rig.bracoD.userData.cotovelo;
-  if (cotE) cotE.rotation.x = -0.18 - 0.35 * andar;
-  if (cotD) cotD.rotation.x = -0.18 - 0.35 * andar;
-  rig.corpo.rotation.set(andar * 0.08, 0, 0);
-  if (rig.cabeca) rig.cabeca.rotation.set(Math.sin(t * 1.7) * 0.03, Math.sin(t * 0.9) * 0.06, 0);
+  if (cotE) cotE.rotation.x = -0.18 - (0.2 + Math.max(0, s) * 0.45) * andar;
+  if (cotD) cotD.rotation.x = -0.18 - (0.2 + Math.max(0, -s) * 0.45) * andar;
+  // inclina para frente, balança o quadril e torce o tronco a cada passo
+  rig.corpo.rotation.set(andar * 0.1, s * 0.1 * andar, -s * 0.035 * andar);
+  // a cabeça compensa a torção do tronco e fica olhando para frente
+  if (rig.cabeca) rig.cabeca.rotation.set(Math.sin(t * 1.7) * 0.03 - andar * 0.06, Math.sin(t * 0.9) * 0.06 * (1 - andar) - s * 0.09 * andar, 0);
 
   if (rig.capa) rig.capa.rotation.x = 0.1 + andar * 0.5 + Math.sin(t * 3) * 0.04;
   if (rig.cachecol) rig.cachecol.rotation.x = 0.2 + andar * 0.9 + Math.sin(t * 6) * 0.1;
-  if (rig.saia) rig.saia.rotation.z = Math.sin(rig.fase) * 0.05 * andar;
+  if (rig.saia) rig.saia.rotation.set(-andar * 0.06, 0, Math.sin(rig.fase) * 0.05 * andar);
+  if (rig.barba) rig.barba.rotation.x = Math.abs(c) * 0.08 * andar;
+  if (rig.chapeuPonta) rig.chapeuPonta.rotation.x = -0.5 - andar * 0.25 + Math.sin(t * 2 + rig.fase * 0.5) * 0.05;
   if (rig.orelhas) {
     const o = Math.sin(t * 8 + rig.fase) * 0.08;
     rig.orelhas[0].rotation.z = -1.25 + o;
@@ -972,15 +1162,21 @@ export function animarRig(rig, dt, t, andar, ataque = -1) {
   }
   if (rig.tipo === 'heroi') {
     // segura o item de presente: a vara em pé à frente, o escudo erguido no braço esquerdo
-    if (rig.item === 'vara') {
+    if (rig.maoD === 'vara') {
       rig.bracoD.rotation.x = -0.3 + s * 0.12 * andar;
       rig.bracoD.rotation.z = -0.12;
-    } else if (rig.item === 'escudo') {
+    } else if (rig.maoD === 'espada') {
+      rig.bracoD.rotation.x = -0.15 + s * 0.35 * andar;
+    }
+    if (rig.maoE === 'escudo') {
       rig.bracoE.rotation.x = -0.3 - s * 0.1 * andar;
       rig.bracoE.rotation.z = 0.12;
       if (cotE) cotE.rotation.x = -0.75;
-    } else if (rig.item === 'espada') {
-      rig.bracoD.rotation.x = -0.15 + s * 0.35 * andar;
+    } else if (rig.maoE === 'vara') {
+      rig.bracoE.rotation.x = -0.3 - s * 0.12 * andar;
+      rig.bracoE.rotation.z = 0.12;
+    } else if (rig.maoE === 'espada') {
+      rig.bracoE.rotation.x = -0.15 - s * 0.35 * andar;
     }
   }
 
@@ -1008,13 +1204,13 @@ export function animarRig(rig, dt, t, andar, ataque = -1) {
   } else if (rig.tipo === 'heroi') {
     const a = suave(Math.min(1, p * 2.2));
     const volta = Math.sin(p * Math.PI);
-    if (rig.item === 'escudo') {
+    if (!rig.maoD && rig.maoE === 'escudo') {
       // empurra o escudo para frente
       rig.bracoE.rotation.x = -0.3 - volta * 1.0;
       rig.bracoE.rotation.z = 0.12 - volta * 0.3;
       if (cotE) cotE.rotation.x = -0.75 + volta * 0.6;
       rig.corpo.rotation.y = -volta * 0.35;
-    } else if (rig.item === 'vara') {
+    } else if (rig.maoD === 'vara') {
       // ergue a vara e bate de cima para baixo
       const sobe = Math.min(1, p / 0.5);
       const desce = Math.min(1, Math.max(0, (p - 0.5) / 0.2));
@@ -1027,6 +1223,14 @@ export function animarRig(rig, dt, t, andar, ataque = -1) {
       rig.corpo.rotation.y = volta * 0.45;
       if (cotD) cotD.rotation.x = -0.5 + a * 0.4;
     }
+  } else if (rig.tipo === 'gnomo' && rig.arma === 'magia') {
+    // ergue as mãos e bate a pedra no chão para chamar os espinhos de terra
+    const sobe = suave(Math.min(1, p / 0.55));
+    const desce = suave(Math.max(0, Math.min(1, (p - 0.55) / 0.15)));
+    const braco = -2.6 * sobe + desce * 3.0;
+    rig.bracoD.rotation.x = braco;
+    rig.bracoE.rotation.x = braco;
+    rig.corpo.rotation.x = -0.15 * sobe + desce * 0.35;
   } else if (rig.tipo === 'arqueiro') {
     // estica o braço do arco, puxa a corda e solta
     const soltar = 0.73;

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
   CLASSES, DUENDE, ARQUEIRO, CHEFAO, ATRIBUTOS, REGRAS, NOMES_ATRIBUTO, calcularDano, pontosDeAtaque, vidaPorSegundo,
-  GENEROS, APARENCIAS, ROUPAS, ROUPA_SIMPLES, PRESENTES, atributosHeroi, textoBonus,
+  GENEROS, APARENCIAS, ROUPAS, ROUPA_SIMPLES, PRESENTES, atributosHeroi, textoBonus, HEROI_BASE, MAX_EQUIPADOS, GNOMO_CHEFE,
 } from './config.js';
 import { Input } from './input.js';
 import { criarMundo, texturaBrilho } from './world.js';
@@ -10,6 +10,7 @@ import { Particulas, RastroGolpe, NumerosDano } from './effects.js';
 import { criarPortal } from './portal.js';
 import { criarEstudio } from './estudio.js';
 import { criarVilarejo } from './vilarejo.js';
+import { criarPovoGnomo } from './gnomos.js';
 
 // ------------------------------------------------------------------ Elementos
 const $ = (id) => document.getElementById(id);
@@ -938,12 +939,13 @@ function regenerar(ent, dt) {
     ent.regenT -= 1;
     const ganho = Math.min(vidaPorSegundo(ent.hpMax), ent.hpMax - ent.hp);
     ent.hp += ganho;
-    if (ent === jogador) {
-      tmp.copy(jogador.pos).setY(2.0);
+    if (ent === jogador || ent === heroi) {
+      tmp.copy(ent.pos).setY(2.0);
       numeros.mostrar(tmp, `+${ganho}`, 'cura');
       particulas.emitir(tmp.setY(1.0), 0x6aff8a, 6, { vel: 1, vida: 0.7, subir: 1.2 });
     }
     if (ent === jogador || ent === chefao) atualizarHUD();
+    if (ent === heroi) atualizarHUDHeroi();
   }
 }
 
@@ -951,15 +953,20 @@ function regenerar(ent, dt) {
 /** Move com o joystick/teclado relativo à câmera. Retorna a intensidade do movimento (0 a 1). */
 function moverPelaCamera(ent, vel, dt, girar = true) {
   const m = input.movimento();
-  const mag = Math.hypot(m.x, m.y);
-  if (mag <= 0.01) return 0;
+  const mag = Math.min(1, Math.hypot(m.x, m.y));
   const sy = Math.sin(cam.yaw), cy = Math.cos(cam.yaw);
   const mx = cy * m.x - sy * m.y;
   const mz = -sy * m.x - cy * m.y;
-  ent.pos.x += mx * vel * dt;
-  ent.pos.z += mz * vel * dt;
-  if (girar) ent.dir = girarPara(ent.dir, Math.atan2(mx, mz), dt * 14);
-  return Math.min(1, mag);
+  // acelera e freia em vez de começar e parar de uma vez
+  ent.vx ??= 0;
+  ent.vz ??= 0;
+  const k = 1 - Math.exp(-dt * (mag > 0.01 ? 9 : 13));
+  ent.vx += (mx * vel - ent.vx) * k;
+  ent.vz += (mz * vel - ent.vz) * k;
+  ent.pos.x += ent.vx * dt;
+  ent.pos.z += ent.vz * dt;
+  if (girar && mag > 0.01) ent.dir = girarPara(ent.dir, Math.atan2(mx, mz), dt * 11);
+  return vel > 0 ? Math.min(1, Math.hypot(ent.vx, ent.vz) / vel) : 0;
 }
 
 function duendeMaisProximo(maxDist, cone = Math.PI) {
@@ -1414,28 +1421,50 @@ function cameraCriacao(dt) {
 }
 
 // ------------------------------------------------------------------ Vilarejo
+let povo = null; // gnomos do vilarejo
+
 function mostrarVilarejo() {
-  if (!vilarejo) vilarejo = criarVilarejo();
+  if (!vilarejo) {
+    vilarejo = criarVilarejo();
+    povo = criarPovoGnomo({
+      scene: vilarejo.scene,
+      vilarejo,
+      particulas,
+      numeros,
+      camera,
+      heroi: () => heroi,
+      heroiVisivel: () => !!heroi && heroi.vivo,
+      danoHeroi,
+      tremor: (v) => { tremor = Math.max(tremor, v); },
+    });
+  }
   removerPrevia();
   removerHeroi();
   camera.clearViewOffset();
-  const rig = criarHeroi(escolha);
   const { x, z, dir } = vilarejo.inicio;
-  rig.root.position.set(x, 0, z);
-  rig.root.rotation.y = dir;
-  vilarejo.scene.add(rig.root);
   heroi = {
-    rig,
+    rig: null,
     escolha: { ...escolha },
-    pos: rig.root.position,
+    pos: null,
     dir,
     andar: 0,
-    atributos: atributosHeroi(escolha.item),
     raio: 0.4,
     recarga: 0,
     ataqueT: -1,
+    acertou: false,
+    // o presente começa equipado; o herói pode segurar até dois itens
+    inventario: [escolha.item],
+    equipados: [escolha.item],
+    vivo: true,
+    mortoT: 0,
+    invul: 0,
+    semDano: 0,
+    regenT: 0,
   };
-  heroi.velocidade = heroi.atributos.velocidade * REGRAS.escalaVelocidade;
+  montarRigHeroi(x, z);
+  aplicarAtributos();
+  heroi.hp = heroi.hpMax;
+  povo.reiniciar();
   montarPainelAtributos();
   trocarCena(vilarejo.scene);
   estado = 'vilarejo';
@@ -1447,14 +1476,40 @@ function mostrarVilarejo() {
   controles.classList.add('sem-super');
   controles.classList.remove('hidden');
   $('stats-panel').classList.add('hidden');
+  $('dialog').classList.add('hidden');
+  $('hud-name').textContent = 'Herói';
+  atualizarHUDHeroi();
   input.reiniciar();
   mostrarAviso('Bem-vindo ao Vilarejo!');
   const dica = $('hint');
-  dica.textContent = 'Aqui não há inimigos. Explore à vontade!';
+  dica.textContent = 'Fale com o Gnomo Chefe na praça. Os gnomos são pacíficos… se ninguém os provocar.';
   dica.classList.remove('hidden', 'some');
-  setTimeout(() => dica.classList.add('some'), 4500);
+  setTimeout(() => dica.classList.add('some'), 6000);
   tmp.set(x, 1, z);
   particulas.emitir(tmp, 0x9dff8a, 70, { vel: 4, vida: 1, subir: 1 });
+}
+
+/** (Re)cria o modelo do herói com os itens equipados, no lugar indicado. */
+function montarRigHeroi(x, z) {
+  if (heroi.rig) {
+    heroi.rig.root.parent?.remove(heroi.rig.root);
+    descartarRig(heroi.rig);
+  }
+  const rig = criarHeroi({ ...heroi.escolha, itens: heroi.equipados });
+  rig.root.position.set(x, 0, z);
+  rig.root.rotation.y = heroi.dir;
+  vilarejo.scene.add(rig.root);
+  heroi.rig = rig;
+  heroi.pos = rig.root.position;
+}
+
+/** Recalcula os atributos (base + itens equipados) e o que depende deles. */
+function aplicarAtributos() {
+  const antes = heroi.hpMax || 0;
+  heroi.atributos = atributosHeroi(heroi.equipados);
+  heroi.hpMax = heroi.atributos.vida;
+  heroi.velocidade = heroi.atributos.velocidade * REGRAS.escalaVelocidade;
+  if (heroi.hp !== undefined) heroi.hp = Math.max(1, Math.min(heroi.hpMax, heroi.hp + Math.max(0, heroi.hpMax - antes)));
 }
 
 function removerHeroi() {
@@ -1464,59 +1519,171 @@ function removerHeroi() {
   heroi = null;
 }
 
-const ATAQUE_HEROI = { recarga: 0.55, duracao: 0.45 };
+function atualizarHUDHeroi() {
+  if (!heroi) return;
+  const f = Math.max(0, heroi.hp / heroi.hpMax);
+  $('hp-fill').style.width = `${f * 100}%`;
+  $('hp-fill').classList.toggle('baixa', f <= 0.3);
+  $('hp-text').textContent = `${Math.max(0, Math.ceil(heroi.hp))} / ${heroi.hpMax}`;
+}
+
+function danoHeroi(dano, origem) {
+  const h = heroi;
+  if (!h || !h.vivo || h.invul > 0) return;
+  h.hp -= dano;
+  h.invul = REGRAS.invulnerabilidade;
+  h.semDano = 0;
+  h.regenT = 0;
+  tremor = Math.max(tremor, 0.25);
+  tmp.copy(h.pos).setY(1.9);
+  numeros.mostrar(tmp, dano, 'jogador');
+  particulas.emitir(tmp.setY(1.2), 0xff2222, 12, { vel: 3, vida: 0.5, gravidade: 8 });
+  const v = $('hurt-vignette');
+  v.classList.remove('pisca');
+  void v.offsetWidth;
+  v.classList.add('pisca');
+  tmp.subVectors(h.pos, origem).setY(0).normalize();
+  h.pos.addScaledVector(tmp, 0.35);
+  if (h.hp <= 0) {
+    h.vivo = false;
+    h.mortoT = 0;
+    povo.acalmar();
+    mostrarAviso('Você foi derrotado!');
+  }
+  atualizarHUDHeroi();
+}
+
+// ataque do herói: o golpe acerta no meio da animação
+const ATAQUE_HEROI = { recarga: 0.55, duracao: 0.45, acerto: 0.2, alcance: 1.9, arco: Math.PI * 0.7 };
+
+/** Atributo usado no golpe: a vara usa a Inteligência; o resto, o Poder. */
+function ataqueDoHeroi() {
+  const h = heroi;
+  return h.rig.maoD === 'vara' ? h.atributos.inteligencia : h.atributos.poder;
+}
 
 function atualizarHeroi(dt, t) {
   const h = heroi;
+  h.invul = Math.max(0, h.invul - dt);
+  if (!h.vivo) {
+    // caído: depois de um tempo, levanta de novo na entrada do vilarejo
+    h.mortoT += dt;
+    h.rig.root.rotation.x = Math.max(-Math.PI / 2, h.rig.root.rotation.x - dt * 4);
+    animarRig(h.rig, dt, t, 0);
+    if (h.mortoT > 2.5) {
+      const { x, z, dir } = vilarejo.inicio;
+      h.pos.set(x, 0, z);
+      h.dir = dir;
+      h.rig.root.rotation.x = 0;
+      h.vivo = true;
+      h.hp = h.hpMax;
+      h.invul = 1.5;
+      atualizarHUDHeroi();
+      tmp.set(x, 1, z);
+      particulas.emitir(tmp, 0x9dff8a, 50, { vel: 3, vida: 0.9, subir: 1 });
+    }
+    return;
+  }
   const atacando = h.ataqueT >= 0;
   const mag = moverPelaCamera(h, h.velocidade * (atacando ? 0.5 : 1), dt, !atacando);
   vilarejo.resolverColisao(h.pos, h.raio);
   h.andar += (mag - h.andar) * Math.min(1, dt * 10);
-  // ataque: ainda não há inimigos no vilarejo, mas o golpe já pode ser treinado
+
   h.recarga -= dt;
   if (input.atacando() && h.recarga <= 0 && !atacando) {
+    // mira automática no gnomo mais próximo à frente
+    let alvo = null, melhor = 3;
+    for (const g of povo.gnomos) {
+      if (g.morto) continue;
+      const d = distXZ(g.pos, h.pos);
+      if (d < melhor) { melhor = d; alvo = g; }
+    }
+    if (alvo) h.dir = Math.atan2(alvo.pos.x - h.pos.x, alvo.pos.z - h.pos.z);
     h.ataqueT = 0;
+    h.acertou = false;
     h.recarga = ATAQUE_HEROI.recarga;
   }
   if (h.ataqueT >= 0) {
     h.ataqueT += dt;
+    if (!h.acertou && h.ataqueT >= ATAQUE_HEROI.acerto) {
+      h.acertou = true;
+      povo.atacar(h.pos, h.dir, ATAQUE_HEROI.alcance, ATAQUE_HEROI.arco, ataqueDoHeroi());
+    }
     if (h.ataqueT >= ATAQUE_HEROI.duracao) h.ataqueT = -1;
   }
+  regenerar(h, dt);
   h.rig.root.rotation.y = h.dir;
   animarRig(h.rig, dt, t, h.andar, h.ataqueT >= 0 ? h.ataqueT / ATAQUE_HEROI.duracao : -1);
+  h.rig.root.visible = h.invul <= 0 || Math.floor(h.invul * 20) % 2 === 0;
   $('attack-cd').style.transform = `scaleY(${Math.max(0, h.recarga) / ATAQUE_HEROI.recarga})`;
+
+  // perto do Gnomo Chefe aparece o botão de conversar
+  const perto = distXZ(h.pos, povo.chefe.pos) < GNOMO_CHEFE.distanciaConversa;
+  $('talk-btn').classList.toggle('hidden', !perto || !$('dialog').classList.contains('hidden'));
 }
 
-// ------------------------------------------------------------------ Painel de atributos
+// ------------------------------------------------------------------ Conversa com o Gnomo Chefe
+// O texto completo da conversa será definido depois.
+$('talk-btn').addEventListener('click', () => {
+  $('dialog-text').textContent = 'Olá, jovem aventureiro! Eu sou o chefe dos gnomos deste vilarejo. Que bom que você atravessou o portal… Temos muito o que conversar.';
+  $('dialog').classList.remove('hidden');
+  $('talk-btn').classList.add('hidden');
+});
+$('dialog-close').addEventListener('click', () => $('dialog').classList.add('hidden'));
+
+// ------------------------------------------------------------------ Painel de atributos e itens
 const ICONE_PERSONAGEM = `<svg viewBox="0 0 64 64" aria-hidden="true">
   <circle cx="32" cy="21" r="11" fill="currentColor"/>
   <path d="M12 56 C12 42 21 35 32 35 C43 35 52 42 52 56 Z" fill="currentColor"/></svg>`;
 
-/** Mostra os atributos do herói: base, bônus do presente e total. */
+const sinal = (v) => `${v > 0 ? '+' : ''}${v}`;
+
+/** Atributos (só os números, com o bônus dos itens equipados) e a lista de itens. */
 function montarPainelAtributos() {
-  const presente = PRESENTES.find((p) => p.id === heroi.escolha.item);
+  const h = heroi;
   const linhas = ATRIBUTOS.map((a) => {
-    const total = heroi.atributos[a.chave];
-    const bonus = presente.bonus[a.chave] || 0;
-    const extra = bonus ? `<span class="${bonus > 0 ? 'bonus-mais' : 'bonus-menos'}">${bonus > 0 ? '+' : ''}${bonus}</span>` : '';
-    return `<div class="stat">
-        <span class="stat-nome">${a.nome}</span>
-        <span class="stat-barra"><span style="width:${Math.min(100, (total / 30) * 100)}%"></span></span>
-        <span class="stat-valor">${total}${extra}</span>
+    const bonus = h.atributos[a.chave] - HEROI_BASE[a.chave];
+    const extra = bonus ? ` <span class="${bonus > 0 ? 'bonus-mais' : 'bonus-menos'}">(${sinal(bonus)})</span>` : '';
+    return `<div class="atributo"><span>${a.nome}</span><b>${h.atributos[a.chave]}${extra}</b></div>`;
+  }).join('');
+  const cheio = h.equipados.length >= MAX_EQUIPADOS;
+  const itens = h.inventario.map((id) => {
+    const item = PRESENTES.find((p) => p.id === id);
+    const equipado = h.equipados.includes(id);
+    const efeitos = Object.entries(item.bonus)
+      .map(([k, v]) => `<li class="${v > 0 ? 'bonus-mais' : 'bonus-menos'}">${sinal(v)} ${ATRIBUTOS.find((a) => a.chave === k).nome}</li>`)
+      .join('');
+    const botao = equipado
+      ? `<button class="botao-item remover" data-item="${id}">Remover</button>`
+      : `<button class="botao-item" data-item="${id}" ${cheio ? 'disabled' : ''}>Equipar</button>`;
+    return `<div class="painel-item${equipado ? ' equipado' : ''}">
+        <span class="icone-presente">${iconePresente(id)}</span>
+        <div class="painel-item-info"><b>${item.nome}</b>${equipado ? '<small>Equipado</small>' : ''}<ul>${efeitos}</ul></div>
+        ${botao}
       </div>`;
   }).join('');
-  const efeitos = Object.entries(presente.bonus)
-    .map(([k, v]) => `<li class="${v > 0 ? 'bonus-mais' : 'bonus-menos'}">${v > 0 ? '+' : ''}${v} ${ATRIBUTOS.find((a) => a.chave === k).nome}</li>`)
-    .join('');
   $('stats-body').innerHTML = `
-    <div class="stats">${linhas}</div>
-    <h3>Item</h3>
-    <div class="painel-item">
-      <span class="icone-presente">${iconePresente(presente.id)}</span>
-      <div><b>${presente.nome}</b><ul>${efeitos}</ul></div>
-    </div>`;
+    <div class="atributos">${linhas}</div>
+    <h3>Itens <small>${h.equipados.length}/${MAX_EQUIPADOS} nas mãos</small></h3>
+    ${itens}`;
 }
 
+function alternarItem(id) {
+  const h = heroi;
+  if (h.equipados.includes(id)) h.equipados = h.equipados.filter((i) => i !== id);
+  else if (h.equipados.length < MAX_EQUIPADOS) h.equipados = [...h.equipados, id];
+  montarRigHeroi(h.pos.x, h.pos.z);
+  aplicarAtributos();
+  montarPainelAtributos();
+  atualizarHUDHeroi();
+  tmp.copy(h.pos).setY(1.2);
+  particulas.emitir(tmp, 0xffe08a, 25, { vel: 2.5, vida: 0.6, subir: 0.6 });
+}
+
+$('stats-body').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-item]');
+  if (b && !b.disabled) alternarItem(b.dataset.item);
+});
 $('stats-btn').innerHTML = ICONE_PERSONAGEM;
 $('stats-btn').addEventListener('click', () => $('stats-panel').classList.toggle('hidden'));
 $('stats-close').addEventListener('click', () => $('stats-panel').classList.add('hidden'));
@@ -1548,6 +1715,7 @@ function loop() {
     estudio.atualizar(dt, tempo);
   } else if (estado === 'vilarejo') {
     atualizarHeroi(dt, tempo);
+    povo.atualizar(dt, tempo);
     vilarejo.atualizar(dt, tempo, heroi.pos, camera);
   } else if (jogador) {
     atualizarJogador(dt, tempo);
@@ -1573,10 +1741,16 @@ function loop() {
 }
 
 // ------------------------------------------------------------------ Tela inicial
-$('intro-btn').addEventListener('click', () => {
+function sairDaIntro() {
   const intro = $('intro-screen');
   intro.classList.add('saindo');
   setTimeout(() => intro.classList.add('hidden'), 700);
+}
+$('intro-btn').addEventListener('click', sairDaIntro);
+// pular o tutorial: vai direto para a criação do personagem
+$('skip-btn').addEventListener('click', () => {
+  sairDaIntro();
+  mostrarCriacao();
 });
 
 montarCartas();

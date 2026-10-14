@@ -42,6 +42,12 @@
       <div class="painel-topo"><h2>Personagem</h2><button id="stats-close" aria-label="Fechar">✕</button></div>
       <div id="stats-body"></div>
     </div>
+    <button id="talk-btn" class="botao-conversar hidden">Falar com o Gnomo Chefe</button>
+    <div id="dialog" class="dialogo hidden" role="dialog" aria-label="Conversa com o Gnomo Chefe">
+      <div class="dialogo-nome">Gnomo Chefe</div>
+      <p id="dialog-text"></p>
+      <button id="dialog-close" class="botao-secundario">Até logo</button>
+    </div>
     <div id="banner" class="aviso hidden"></div>
     <div id="hint" class="dica hidden">Siga a trilha até o fim. Arraste a tela para girar a câmera.</div>
   </div>
@@ -65,7 +71,10 @@
   <!-- Tela inicial -->
   <div id="intro-screen" class="tela-intro">
     <p class="intro-titulo">Floresta Sombria</p>
-    <button id="intro-btn" class="botao-intro">Iniciar Tutorial</button>
+    <div class="intro-botoes">
+      <button id="intro-btn" class="botao-intro">Iniciar Tutorial</button>
+      <button id="skip-btn" class="botao-pular">Pular tutorial</button>
+    </div>
   </div>
 
   <!-- Seleção de avatar -->

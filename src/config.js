@@ -204,7 +204,10 @@ export const ROUPAS = [
 export const ROUPA_SIMPLES = { id: 'linho', principal: 0xcdbf9f, detalhe: 0x8a7656, calca: 0x6e6250, bota: 0x4a3a28 };
 
 /** Atributos do personagem definitivo antes do bônus do presente. */
-export const HEROI_BASE = { vida: 10, poder: 5, velocidade: 15, defesa: 5, inteligencia: 5 };
+export const HEROI_BASE = { vida: 10, poder: 5, velocidade: 25, defesa: 5, inteligencia: 5 };
+
+/** Quantos itens o herói pode segurar ao mesmo tempo. */
+export const MAX_EQUIPADOS = 2;
 
 /** Item de presente e o bônus que ele dá nos atributos. */
 export const PRESENTES = [
@@ -213,11 +216,13 @@ export const PRESENTES = [
   { id: 'escudo', nome: 'Escudo', bonus: { defesa: 15, velocidade: -3 } },
 ];
 
-/** Atributos finais do herói: base + bônus do presente. */
-export function atributosHeroi(itemId) {
-  const bonus = PRESENTES.find((p) => p.id === itemId)?.bonus || {};
+/** Atributos finais do herói: base + bônus dos itens equipados. */
+export function atributosHeroi(equipados) {
   const total = { ...HEROI_BASE };
-  for (const [k, v] of Object.entries(bonus)) total[k] += v;
+  for (const id of equipados) {
+    const bonus = PRESENTES.find((p) => p.id === id)?.bonus || {};
+    for (const [k, v] of Object.entries(bonus)) total[k] += v;
+  }
   return total;
 }
 
@@ -227,3 +232,40 @@ export function textoBonus(bonus) {
     .map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${ATRIBUTOS.find((a) => a.chave === k).nome}`)
     .join(', ');
 }
+
+// ------------------------------------------------------------------ Gnomos do vilarejo
+// Pacíficos: só atacam quem os ataca. Bravos, ficam mais rápidos.
+export const GNOMO = {
+  nome: 'Gnomo',
+  vida: 120,
+  poder: 30,
+  velocidade: 20,       // feliz
+  velocidadeBrava: 45,  // bravo
+  defesa: 30,
+  inteligencia: 80,
+  raio: 0.32,
+  alturaAcerto: 0.55,
+  quantidadeMin: 10,
+  quantidadeMax: 15,
+  renascer: 12,         // segundos até outro gnomo chegar no lugar de um derrotado
+  raiva: 20,            // segundos sem apanhar até se acalmar
+  raioAlerta: 8,        // gnomos a esta distância do atacado também ficam bravos
+  espada: { atributo: 'poder', alcance: 1.15, recarga: 1.1, preparo: 0.38, duracao: 0.7 },
+  magia: {
+    atributo: 'inteligencia',
+    alcance: 11,          // distância máxima para lançar
+    distanciaIdeal: 6.5,  // tenta ficar a esta distância
+    recarga: 2.6,
+    preparo: 0.7,         // erguer as mãos
+    duracao: 1.05,
+    atraso: 0.75,         // tempo entre o aviso no chão e os espinhos de terra
+    raio: 1.35,
+  },
+};
+
+export const GNOMO_CHEFE = {
+  nome: 'Gnomo Chefe',
+  x: 0,
+  z: 2.7,                 // na praça, ao lado do poço
+  distanciaConversa: 3,
+};

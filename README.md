@@ -16,15 +16,32 @@ mais duendes aparecem. No fim dela, numa clareira com pedras antigas, espera o
      (só as cores aparecem na tela).
    - **Roupa:** vermelha com detalhes marrons, azul com detalhes brancos ou verde com detalhes pretos.
    - **Presente:** espada, vara ou escudo, cada um com um bônus nos atributos.
-3. **Vilarejo:** o personagem aparece num vilarejo de dia, sem inimigos — praça com poço,
-   casas, feira, horta, moinho e floresta em volta. O joystick e o botão de ataque continuam
-   na tela, e o botão com o ícone do personagem (canto superior direito) mostra os atributos e o item.
+3. **Vilarejo:** o personagem aparece num vilarejo de dia — praça com poço, casas, feira, horta,
+   moinho e floresta em volta. O joystick e o botão de ataque continuam na tela. O botão com o
+   ícone do personagem (canto superior direito) mostra os atributos (só os números) e os itens,
+   cada um com o botão **Equipar** / **Remover**. O herói segura até **dois itens** ao mesmo tempo.
+   Se cair, levanta de novo na entrada do vilarejo.
+
+### Gnomos
+
+Sempre há de 10 a 15 gnomos passeando pelo vilarejo: pequenos, chapéu de cone vermelho, roupa
+azul ou verde e barba branca cheia. São pacíficos, mas quem bate num gnomo deixa ele (e os gnomos
+a até 8 m) bravos: ficam mais rápidos e revidam com uma **espadinha** (Poder) ou com a **magia de
+terra** (Inteligência), que marca um círculo no chão e faz espinhos de pedra saírem da terra.
+Ficam calmos de novo depois de 20 s sem apanhar. Um gnomo derrotado é substituído por outro após 12 s.
+
+| | Vida | Poder | Velocidade | Defesa | Inteligência |
+| --- | --- | --- | --- | --- | --- |
+| Gnomo | 120 | 30 | 20 (feliz) / 45 (bravo) | 30 | 80 |
+
+O **Gnomo Chefe** fica parado na praça, ao lado do poço, com coroa em vez de chapéu pontudo.
+Chegando perto dele aparece o botão **Falar com o Gnomo Chefe** (a conversa completa virá depois).
 
 ### Atributos do personagem definitivo
 
 | | Vida | Poder | Velocidade | Defesa | Inteligência |
 | --- | --- | --- | --- | --- | --- |
-| Base | 10 | 5 | 15 | 5 | 5 |
+| Base | 10 | 5 | 25 | 5 | 5 |
 | Espada | | +15 | | | |
 | Vara | +5 | | | | +10 |
 | Escudo | | | −3 | +15 | |
@@ -33,7 +50,8 @@ A velocidade final define a velocidade de movimento no vilarejo (`velocidade × 
 
 ## Como jogar
 
-O jogo abre numa tela escura com o botão **Iniciar Tutorial**; ao tocar nele, vem a escolha do avatar.
+O jogo abre numa tela escura com o botão **Iniciar Tutorial** (vai para a escolha do avatar) e, embaixo,
+**Pular tutorial**, que leva direto à criação do personagem.
 
 | Ação | Celular | Computador |
 | --- | --- | --- |
@@ -126,6 +144,7 @@ src/world.js      trilha, rio, floresta, lamparinas, clareira final, lua, colis�
 src/portal.js     portal verde que se abre quando o chefão morre
 src/estudio.js    cenário da criação do personagem (pedestal mágico)
 src/vilarejo.js   vilarejo: casas, praça, poço, feira, horta, moinho e colisões
+src/gnomos.js     gnomos do vilarejo: passeio, raiva, espada, magia de terra e o Gnomo Chefe
 src/natureza.js   pinheiros, carvalhos, pedras, arbustos, grama ao vento, lamparinas e braseiros
 src/models.js     modelos cartoon (sombreado toon + contorno, joelhos e cotovelos articulados) e animações
 src/effects.js    partículas, rastro de golpe e números de dano

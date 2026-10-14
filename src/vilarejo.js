@@ -809,5 +809,19 @@ export function criarVilarejo() {
     inicio: { x: 0, z: 24, dir: Math.PI },
     atualizar,
     resolverColisao,
+    addCirculo,
+    /** Um ponto livre aleatório dentro do vilarejo (para os gnomos passearem). */
+    pontoLivre(folga = 0.6, longeDe = null, distMin = 0) {
+      for (let k = 0; k < 60; k++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = Math.sqrt(Math.random()) * (RAIO_ANDAVEL - 2);
+        const x = Math.cos(a) * r, z = Math.sin(a) * r;
+        if (longeDe && Math.hypot(x - longeDe.x, z - longeDe.z) < distMin) continue;
+        if (livre(x, z, folga)) return { x, z };
+      }
+      return { x: 0, z: 12 };
+    },
+    /** Altura do chão (o vilarejo é plano onde se anda). */
+    altura,
   };
 }
