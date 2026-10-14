@@ -37,3 +37,9 @@ export const CONVERSA_CHEFE_VITORIA = [
 export const CONVERSA_CHEFE_LEMBRETE = [
   { texto: 'O portal no fundo da vila leva ao castelo dos duendes. Livre-nos dessa peste!', expressao: 'bravo' },
 ];
+
+/** Últimas palavras da Princesa Duendete antes de morrer. */
+export const CONVERSA_PRINCESA_MORTE = [
+  { texto: 'Os Gnomos saaa-…..', expressao: 'agonizando' },
+  { texto: 'Mentirosooossss', expressao: 'fraca' },
+];

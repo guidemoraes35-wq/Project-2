@@ -15,7 +15,7 @@ import { criarCastelo } from './castelo.js';
 import { criarDuendesCastelo } from './duendesCastelo.js';
 import { criarOrbes } from './xp.js';
 import { XP, xpParaSubir, MELHORIAS, DUENDE_FRACO, ARQUEIRO_CASTELO, DUENDE_MAGICO, PRINCESA, ITENS, item, ATAQUES_HEROI } from './config.js';
-import { CONVERSA_CHEFE, CONVERSA_CHEFE_SIM, CONVERSA_CHEFE_NAO, CONVERSA_CHEFE_LEMBRETE, CONVERSA_CHEFE_VITORIA } from './conversas.js';
+import { CONVERSA_CHEFE, CONVERSA_CHEFE_SIM, CONVERSA_CHEFE_NAO, CONVERSA_CHEFE_LEMBRETE, CONVERSA_CHEFE_VITORIA, CONVERSA_PRINCESA_MORTE } from './conversas.js';
 
 // ------------------------------------------------------------------ Elementos
 const $ = (id) => document.getElementById(id);
@@ -1517,6 +1517,13 @@ function prepararCastelo() {
       else if (d.cfg === PRINCESA) derrotouPrincesa(d);
     },
     aoFerirPrincesa: (d) => mostrarBarraPrincesa(d),
+    // antes de morrer, a princesa ainda diz as últimas palavras
+    aoPrincesaCaindo: (d) => iniciarConversa(CONVERSA_PRINCESA_MORTE, {
+      nome: PRINCESA.nome,
+      com: d.pos,
+      expressar: (pose) => { d.pose = pose; },
+      aoTerminar: () => duendesCastelo.finalizarPrincesa(),
+    }),
   }));
   duendesCastelo.reiniciar();
 }

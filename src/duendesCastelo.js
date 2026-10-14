@@ -117,19 +117,36 @@ export function criarDuendesCastelo(ctx) {
     d.barra.visible = d !== princesa;
     d.alerta = true;
     if (d === princesa) ctx.aoFerirPrincesa?.(d);
-    if (d.hp <= 0) {
-      d.morto = true;
-      d.barra.visible = false;
-      derrotados++;
-      particulas.emitir(tmp, 0x8cff6a, 25, { vel: 3, vida: 0.9, subir: 1 });
-      ctx.aoMorrer?.(d);
+    if (d.hp <= 0 && d === princesa) {
+      // a princesa não morre na hora: ainda fala com o herói antes de cair
+      d.hp = 0;
+      d.morrendo = true;
+      d.ataqueT = -1;
+      ctx.aoPrincesaCaindo?.(d);
+    } else if (d.hp <= 0) {
+      morrer(d);
     }
+  }
+
+  function morrer(d) {
+    d.morto = true;
+    d.morrendo = false;
+    d.barra.visible = false;
+    derrotados++;
+    tmp.copy(d.pos).setY(d.cfg.alturaAcerto + 0.6);
+    particulas.emitir(tmp, 0x8cff6a, 25, { vel: 3, vida: 0.9, subir: 1 });
+    ctx.aoMorrer?.(d);
+  }
+
+  /** Depois das últimas palavras, a princesa cai. */
+  function finalizarPrincesa() {
+    if (princesa && !princesa.morto) morrer(princesa);
   }
 
   function atacar(origem, dir, alcance, arco, ataque) {
     let acertos = 0;
     for (const d of duendes) {
-      if (d.morto) continue;
+      if (d.morto || d.morrendo) continue;
       const dist = distXZ(d.pos, origem);
       if (dist > alcance + d.cfg.raio) continue;
       const ang = Math.atan2(d.pos.x - origem.x, d.pos.z - origem.z);
@@ -142,7 +159,7 @@ export function criarDuendesCastelo(ctx) {
 
   /** Um golpe que já escolheu o alvo (o jato de água da vara). */
   function atingir(d, ataque, origem) {
-    if (!d.morto) ferir(d, calcularDano(ataque, d.cfg.defesa), origem);
+    if (!d.morto && !d.morrendo) ferir(d, calcularDano(ataque, d.cfg.defesa), origem);
   }
 
   // ---------- Princesa Duendete: chama duendes fracos a cada 5 s ----------
@@ -153,7 +170,7 @@ export function criarDuendesCastelo(ctx) {
       d.alerta = true;
       ctx.aoFerirPrincesa?.(d);
     }
-    if (!d.alerta || !visivel) return 0;
+    if (d.morrendo || !d.alerta || !visivel) return 0;
     const dist = distXZ(d.pos, heroi.pos);
     const alvoAng = Math.atan2(heroi.pos.x - d.pos.x, heroi.pos.z - d.pos.z);
     d.dir = girarPara(d.dir, alvoAng, dt * 6);
@@ -346,12 +363,42 @@ export function criarDuendesCastelo(ctx) {
     const duracao = d === princesa ? PRINCESA.invocacao.duracao : cfg.duracaoAtaque;
     animarRig(rig, dt, t, d.andar, d.ataqueT >= 0 ? d.ataqueT / duracao : -1);
     if (rig.orbe) rig.orbe.material.emissiveIntensity = 1.6 + Math.sin(t * 6 + d.desvio * 4) * 0.6;
+    if (d.morrendo) poseMorrendo(d, dt, t);
     d.flash = Math.max(0, d.flash - dt);
     rig.pele.emissive.setRGB(d.flash > 0 ? 1 : 0, d.flash > 0 ? 0.25 : 0, d.flash > 0 ? 0.2 : 0);
     d.barra.position.set(d.pos.x, 1.35, d.pos.z);
     d.barra.quaternion.copy(camera.quaternion);
     d.fill.scale.x = Math.max(0.001, d.hp / d.hpMax);
     return false;
+  }
+
+  /**
+   * Últimas palavras da princesa. 'agonizando': cambaleia e estende a mão para o herói;
+   * 'fraca': cai de joelhos, a cabeça pende e o cetro se apaga.
+   */
+  function poseMorrendo(d, dt, t) {
+    const r = d.rig;
+    d.poseT = (d.pose === d.poseAnterior ? d.poseT || 0 : 0) + dt;
+    d.poseAnterior = d.pose;
+    const k = Math.min(1, d.poseT * 2);
+    const cotE = r.bracoE.userData.cotovelo;
+    if (d.pose === 'fraca') {
+      r.corpo.position.y -= 0.28 * k;
+      r.corpo.rotation.x = 0.4 * k;
+      r.corpo.rotation.z = Math.sin(t * 1.6) * 0.06;
+      r.cabeca.rotation.x = 0.45 * k;
+      r.bracoE.rotation.set(-0.3, 0, 0.15);
+      r.bracoD.rotation.set(-0.2, 0, -0.15);
+      r.pernaE.rotation.x = -1.1 * k;
+      r.pernaD.rotation.x = -1.1 * k;
+      if (r.orbe) r.orbe.material.emissiveIntensity = 0.3 * (1 - k) + 0.1;
+    } else {
+      r.corpo.rotation.x = 0.15 + Math.sin(t * 2.3) * 0.05;
+      r.corpo.rotation.z = Math.sin(t * 1.8) * 0.1;
+      r.bracoE.rotation.set(-1.4, 0, -0.2);
+      if (cotE) cotE.rotation.x = -0.2;
+      r.cabeca.rotation.x = 0.1;
+    }
   }
 
   function atualizar(dt, t) {
@@ -372,7 +419,8 @@ export function criarDuendesCastelo(ctx) {
     atingir,
     acalmar,
     princesa: () => princesa,
-    alvos: () => duendes.filter((d) => !d.morto),
+    alvos: () => duendes.filter((d) => !d.morto && !d.morrendo),
+    finalizarPrincesa,
     restantes: () => total - derrotados,
     total: () => total,
   };

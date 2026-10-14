@@ -69,7 +69,9 @@ fica mais alta, olhando por cima das paredes. Se o herói cair, volta no portão
 | Princesa Duendete | 80 | 10 | 30 | 15 | 30 | 1 |
 
 A **Princesa Duendete** foge do herói pela sala e, a cada 5 s, chama 5 duendes fracos para atacá-lo
-(no máximo 15 de uma vez). Derrotada, aparece um **portal azul-claro** que volta à vila dos gnomos.
+(no máximo 15 de uma vez). Quando a vida dela acaba, ela ainda fala com o herói — "Os Gnomos
+saaa-….." e, já fraca, de joelhos, "Mentirosooossss" — e só então morre. Aparece um **portal
+azul-claro** que volta à vila dos gnomos.
 
 No meio do labirinto há um **baú** com um **Escudo** (+15 Defesa, −3 Velocidade). Quem ganhou o escudo
 de presente encontra o **Escudo Duendeiro**, verde e com espinhos (+20 Defesa, −5 Velocidade).
