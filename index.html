@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#05070e">
+  <title>Floresta Sombria</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌲</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.min.js" } }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-jogador">
+      <div id="hud-name" class="hud-nome"></div>
+      <div class="barra-vida">
+        <div id="hp-fill" class="preenchimento"></div>
+        <span id="hp-text"></span>
+      </div>
+      <div id="hud-stats" class="hud-stats"></div>
+    </div>
+    <div class="hud-duendes">
+      <span class="rotulo">Duendes derrotados</span>
+      <span id="kills">0 / 0</span>
+    </div>
+    <div id="hint" class="dica hidden">Arraste a tela para girar a câmera</div>
+  </div>
+
+  <!-- Controles de toque -->
+  <div id="controls" class="hidden">
+    <div id="joystick" aria-label="Mover"><div id="joystick-knob"></div></div>
+    <button id="attack-btn" aria-label="Atacar">
+      <div id="attack-cd"></div>
+      <span>⚔️</span>
+    </button>
+  </div>
+
+  <div id="damage-layer"></div>
+  <div id="hurt-vignette"></div>
+
+  <!-- Seleção de avatar -->
+  <div id="select-screen" class="tela hidden">
+    <header>
+      <h1>Floresta Sombria</h1>
+      <p>Escolha seu avatar e entre na dungeon</p>
+    </header>
+    <div class="espaco"></div>
+    <div id="class-cards" class="cartas"></div>
+    <button id="start-btn" class="botao-principal">Entrar na Dungeon</button>
+    <p class="teclado">No computador: WASD para mover, Espaço para atacar, arraste o mouse para girar a câmera.</p>
+  </div>
+
+  <!-- Fim de jogo -->
+  <div id="end-screen" class="tela tela-fim hidden">
+    <h1 id="end-title"></h1>
+    <p id="end-text"></p>
+    <div class="botoes">
+      <button id="restart-btn" class="botao-principal">Jogar novamente</button>
+      <button id="change-btn" class="botao-secundario">Trocar avatar</button>
+    </div>
+  </div>
+
+  <noscript>Este jogo precisa de JavaScript.</noscript>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
