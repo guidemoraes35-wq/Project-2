@@ -12,12 +12,24 @@ mais duendes aparecem. No fim dela, numa clareira com pedras antigas, espera o
 1. **Portal:** quando o Chefão Duende morre, um portal verde se abre onde ele caiu.
    Atravessar o portal leva à criação do personagem.
 2. **Criação do personagem definitivo**, em três etapas (com prévia 3D num pedestal; arraste para girar):
-   - **Aparência:** menino ou menina, e loiro(a) de olhos azuis, asiático(a) oriental, indiano(a),
-     africano(a), branco(a) de cabelo castanho e olhos verdes ou branco(a) de cabelo preto e olhos castanhos.
+   - **Aparência:** menino ou menina, e uma das 6 combinações de cor de pele, cabelo e olhos
+     (só as cores aparecem na tela).
    - **Roupa:** vermelha com detalhes marrons, azul com detalhes brancos ou verde com detalhes pretos.
-   - **Presente:** espada, vara ou escudo (a função de cada um será definida depois).
+   - **Presente:** espada, vara ou escudo, cada um com um bônus nos atributos.
 3. **Vilarejo:** o personagem aparece num vilarejo de dia, sem inimigos — praça com poço,
-   casas, feira, horta, moinho e floresta em volta.
+   casas, feira, horta, moinho e floresta em volta. O joystick e o botão de ataque continuam
+   na tela, e o botão com o ícone do personagem (canto superior direito) mostra os atributos e o item.
+
+### Atributos do personagem definitivo
+
+| | Vida | Poder | Velocidade | Defesa | Inteligência |
+| --- | --- | --- | --- | --- | --- |
+| Base | 10 | 5 | 15 | 5 | 5 |
+| Espada | | +15 | | | |
+| Vara | +5 | | | | +10 |
+| Escudo | | | −3 | +15 | |
+
+A velocidade final define a velocidade de movimento no vilarejo (`velocidade × 0,2` metros por segundo).
 
 ## Como jogar
 

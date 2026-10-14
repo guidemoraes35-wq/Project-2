@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
   CLASSES, DUENDE, ARQUEIRO, CHEFAO, ATRIBUTOS, REGRAS, NOMES_ATRIBUTO, calcularDano, pontosDeAtaque, vidaPorSegundo,
-  GENEROS, APARENCIAS, ROUPAS, ROUPA_SIMPLES, PRESENTES, VILAREJO,
+  GENEROS, APARENCIAS, ROUPAS, ROUPA_SIMPLES, PRESENTES, atributosHeroi, textoBonus,
 } from './config.js';
 import { Input } from './input.js';
 import { criarMundo, texturaBrilho } from './world.js';
@@ -182,7 +182,7 @@ function mostrarSelecao() {
   telaFim.classList.add('hidden');
   telaCriacao.classList.add('hidden');
   hud.classList.remove('modo-vilarejo');
-  controles.classList.remove('sem-combate');
+  controles.classList.remove('sem-super');
   hud.classList.add('hidden');
   controles.classList.add('hidden');
   telaSelecao.classList.remove('hidden');
@@ -1295,13 +1295,14 @@ function montarEtapa() {
     for (const g of GENEROS) {
       html += botaoOpcao('genero', g.id, escolha.genero === g.id, `<span class="opcao-nome">${g.nome}</span>`);
     }
-    html += '</div><h2 class="criacao-pergunta">Aparência</h2><div class="opcoes opcoes-2">';
+    // só as cores de pele, cabelo e olhos; o nome fica apenas para leitores de tela
+    html += '</div><h2 class="criacao-pergunta">Aparência</h2><div class="opcoes opcoes-3 opcoes-cores">';
     for (const a of APARENCIAS) {
-      const nome = escolha.genero ? a.nome[menina ? 1 : 0] : a.nome[0].replace(/^(\S+?)o\b/, '$1o(a)');
+      const nome = a.nome[menina ? 1 : 0];
       html += botaoOpcao('aparencia', a.id, escolha.aparencia === a, `
-        <span class="amostras" aria-hidden="true">
-          <i style="background:${hex(a.pele)}" title="Pele"></i><i style="background:${hex(a.cabelo)}" title="Cabelo"></i><i style="background:${hex(a.olhos)}" title="Olhos"></i>
-        </span><span class="opcao-nome">${nome}</span>`);
+        <span class="amostras" role="img" aria-label="${nome}">
+          <i style="background:${hex(a.pele)}"></i><i style="background:${hex(a.cabelo)}"></i><i style="background:${hex(a.olhos)}"></i>
+        </span>`);
     }
     html += '</div>';
   } else if (etapa === 1) {
@@ -1317,9 +1318,9 @@ function montarEtapa() {
     for (const p of PRESENTES) {
       html += botaoOpcao('item', p.id, escolha.item === p.id, `
         <span class="icone-presente">${iconePresente(p.id)}</span>
-        <span class="opcao-nome">${p.nome}</span>`);
+        <span class="opcao-nome">${p.nome}<small>${textoBonus(p.bonus)}</small></span>`);
     }
-    html += '</div><p class="criacao-nota">A função de cada presente será revelada em breve.</p>';
+    html += '</div>';
   }
   corpo.innerHTML = html;
   corpo.scrollTop = rolagem;
@@ -1429,9 +1430,13 @@ function mostrarVilarejo() {
     pos: rig.root.position,
     dir,
     andar: 0,
-    velocidade: VILAREJO.velocidade * REGRAS.escalaVelocidade,
+    atributos: atributosHeroi(escolha.item),
     raio: 0.4,
+    recarga: 0,
+    ataqueT: -1,
   };
+  heroi.velocidade = heroi.atributos.velocidade * REGRAS.escalaVelocidade;
+  montarPainelAtributos();
   trocarCena(vilarejo.scene);
   estado = 'vilarejo';
   cam.yaw = 0;
@@ -1439,11 +1444,10 @@ function mostrarVilarejo() {
   telaCriacao.classList.add('hidden');
   hud.classList.add('modo-vilarejo');
   hud.classList.remove('hidden', 'com-chefao');
-  controles.classList.add('sem-combate');
+  controles.classList.add('sem-super');
   controles.classList.remove('hidden');
+  $('stats-panel').classList.add('hidden');
   input.reiniciar();
-  const presente = PRESENTES.find((p) => p.id === escolha.item);
-  $('village-gift').innerHTML = `<span class="icone-presente">${iconePresente(escolha.item)}</span>${presente.nome}`;
   mostrarAviso('Bem-vindo ao Vilarejo!');
   const dica = $('hint');
   dica.textContent = 'Aqui não há inimigos. Explore à vontade!';
@@ -1460,14 +1464,62 @@ function removerHeroi() {
   heroi = null;
 }
 
+const ATAQUE_HEROI = { recarga: 0.55, duracao: 0.45 };
+
 function atualizarHeroi(dt, t) {
   const h = heroi;
-  const mag = moverPelaCamera(h, h.velocidade, dt);
+  const atacando = h.ataqueT >= 0;
+  const mag = moverPelaCamera(h, h.velocidade * (atacando ? 0.5 : 1), dt, !atacando);
   vilarejo.resolverColisao(h.pos, h.raio);
   h.andar += (mag - h.andar) * Math.min(1, dt * 10);
+  // ataque: ainda não há inimigos no vilarejo, mas o golpe já pode ser treinado
+  h.recarga -= dt;
+  if (input.atacando() && h.recarga <= 0 && !atacando) {
+    h.ataqueT = 0;
+    h.recarga = ATAQUE_HEROI.recarga;
+  }
+  if (h.ataqueT >= 0) {
+    h.ataqueT += dt;
+    if (h.ataqueT >= ATAQUE_HEROI.duracao) h.ataqueT = -1;
+  }
   h.rig.root.rotation.y = h.dir;
-  animarRig(h.rig, dt, t, h.andar);
+  animarRig(h.rig, dt, t, h.andar, h.ataqueT >= 0 ? h.ataqueT / ATAQUE_HEROI.duracao : -1);
+  $('attack-cd').style.transform = `scaleY(${Math.max(0, h.recarga) / ATAQUE_HEROI.recarga})`;
 }
+
+// ------------------------------------------------------------------ Painel de atributos
+const ICONE_PERSONAGEM = `<svg viewBox="0 0 64 64" aria-hidden="true">
+  <circle cx="32" cy="21" r="11" fill="currentColor"/>
+  <path d="M12 56 C12 42 21 35 32 35 C43 35 52 42 52 56 Z" fill="currentColor"/></svg>`;
+
+/** Mostra os atributos do herói: base, bônus do presente e total. */
+function montarPainelAtributos() {
+  const presente = PRESENTES.find((p) => p.id === heroi.escolha.item);
+  const linhas = ATRIBUTOS.map((a) => {
+    const total = heroi.atributos[a.chave];
+    const bonus = presente.bonus[a.chave] || 0;
+    const extra = bonus ? `<span class="${bonus > 0 ? 'bonus-mais' : 'bonus-menos'}">${bonus > 0 ? '+' : ''}${bonus}</span>` : '';
+    return `<div class="stat">
+        <span class="stat-nome">${a.nome}</span>
+        <span class="stat-barra"><span style="width:${Math.min(100, (total / 30) * 100)}%"></span></span>
+        <span class="stat-valor">${total}${extra}</span>
+      </div>`;
+  }).join('');
+  const efeitos = Object.entries(presente.bonus)
+    .map(([k, v]) => `<li class="${v > 0 ? 'bonus-mais' : 'bonus-menos'}">${v > 0 ? '+' : ''}${v} ${ATRIBUTOS.find((a) => a.chave === k).nome}</li>`)
+    .join('');
+  $('stats-body').innerHTML = `
+    <div class="stats">${linhas}</div>
+    <h3>Item</h3>
+    <div class="painel-item">
+      <span class="icone-presente">${iconePresente(presente.id)}</span>
+      <div><b>${presente.nome}</b><ul>${efeitos}</ul></div>
+    </div>`;
+}
+
+$('stats-btn').innerHTML = ICONE_PERSONAGEM;
+$('stats-btn').addEventListener('click', () => $('stats-panel').classList.toggle('hidden'));
+$('stats-close').addEventListener('click', () => $('stats-panel').classList.add('hidden'));
 
 // ------------------------------------------------------------------ Loop
 const relogio = new THREE.Clock();

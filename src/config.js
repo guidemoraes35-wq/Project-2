@@ -203,13 +203,27 @@ export const ROUPAS = [
 /** Roupa de linho usada na prévia antes de o jogador escolher a dele. */
 export const ROUPA_SIMPLES = { id: 'linho', principal: 0xcdbf9f, detalhe: 0x8a7656, calca: 0x6e6250, bota: 0x4a3a28 };
 
-/** Item de presente. A função de cada um será definida depois. */
+/** Atributos do personagem definitivo antes do bônus do presente. */
+export const HEROI_BASE = { vida: 10, poder: 5, velocidade: 15, defesa: 5, inteligencia: 5 };
+
+/** Item de presente e o bônus que ele dá nos atributos. */
 export const PRESENTES = [
-  { id: 'espada', nome: 'Espada' },
-  { id: 'vara', nome: 'Vara' },
-  { id: 'escudo', nome: 'Escudo' },
+  { id: 'espada', nome: 'Espada', bonus: { poder: 15 } },
+  { id: 'vara', nome: 'Vara', bonus: { inteligencia: 10, vida: 5 } },
+  { id: 'escudo', nome: 'Escudo', bonus: { defesa: 15, velocidade: -3 } },
 ];
 
-export const VILAREJO = {
-  velocidade: 26, // atributo de velocidade do herói no vilarejo (× escalaVelocidade)
-};
+/** Atributos finais do herói: base + bônus do presente. */
+export function atributosHeroi(itemId) {
+  const bonus = PRESENTES.find((p) => p.id === itemId)?.bonus || {};
+  const total = { ...HEROI_BASE };
+  for (const [k, v] of Object.entries(bonus)) total[k] += v;
+  return total;
+}
+
+/** Texto do bônus, por exemplo "+15 Poder, -3 Velocidade". */
+export function textoBonus(bonus) {
+  return Object.entries(bonus)
+    .map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${ATRIBUTOS.find((a) => a.chave === k).nome}`)
+    .join(', ');
+}

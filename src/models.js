@@ -1005,6 +1005,28 @@ export function animarRig(rig, dt, t, andar, ataque = -1) {
     rig.bracoE.rotation.x = -a * 0.9;
     rig.bracoE.rotation.z = a * 0.4;
     rig.corpo.rotation.x = -a * 0.08;
+  } else if (rig.tipo === 'heroi') {
+    const a = suave(Math.min(1, p * 2.2));
+    const volta = Math.sin(p * Math.PI);
+    if (rig.item === 'escudo') {
+      // empurra o escudo para frente
+      rig.bracoE.rotation.x = -0.3 - volta * 1.0;
+      rig.bracoE.rotation.z = 0.12 - volta * 0.3;
+      if (cotE) cotE.rotation.x = -0.75 + volta * 0.6;
+      rig.corpo.rotation.y = -volta * 0.35;
+    } else if (rig.item === 'vara') {
+      // ergue a vara e bate de cima para baixo
+      const sobe = Math.min(1, p / 0.5);
+      const desce = Math.min(1, Math.max(0, (p - 0.5) / 0.2));
+      rig.bracoD.rotation.x = -0.3 - 2.4 * suave(sobe) + desce * 2.6;
+      rig.corpo.rotation.x = -0.12 * sobe + desce * 0.25;
+    } else {
+      // golpe cruzado com a espada (ou com a mão vazia)
+      rig.bracoD.rotation.x = -2.3 + a * 2.6;
+      rig.bracoD.rotation.z = -0.9 + a * 1.4;
+      rig.corpo.rotation.y = volta * 0.45;
+      if (cotD) cotD.rotation.x = -0.5 + a * 0.4;
+    }
   } else if (rig.tipo === 'arqueiro') {
     // estica o braço do arco, puxa a corda e solta
     const soltar = 0.73;

@@ -518,25 +518,58 @@ button { font: inherit; color: inherit; cursor: pointer; }
 #fade.ativo { opacity: 1; pointer-events: auto; }
 
 /* ---------------------------------------------------------------- Vilarejo */
-.hud-vilarejo { display: none; }
+.botao-atributos, .painel-atributos { display: none; }
 #hud.modo-vilarejo .hud-jogador,
 #hud.modo-vilarejo .hud-duendes,
 #hud.modo-vilarejo .chefao { display: none; }
-#hud.modo-vilarejo .hud-vilarejo {
-  display: block;
+#controls.sem-super #super-btn { display: none; }
+
+/* botão com o ícone do personagem, no canto superior direito */
+#hud.modo-vilarejo .botao-atributos {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   position: absolute;
   top: calc(12px + var(--sat));
-  left: calc(12px + var(--sae));
-  padding: 10px 14px;
+  right: calc(12px + var(--sad));
+  width: 56px;
+  height: 56px;
+  padding: 11px;
+  color: var(--ouro);
+  background: radial-gradient(circle at 40% 35%, #3a2f52, #1a1426 70%);
+  border: 2px solid var(--ouro);
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+}
+.botao-atributos svg { width: 100%; height: 100%; }
+.botao-atributos:active { transform: scale(0.94); }
+#hud.modo-vilarejo .painel-atributos:not(.hidden) {
+  display: block;
+  position: absolute;
+  top: calc(76px + var(--sat));
+  right: calc(12px + var(--sad));
+  width: min(300px, calc(100vw - 24px));
+  max-height: calc(100% - 96px - var(--sat) - var(--sab));
+  overflow-y: auto;
+  padding: 12px 14px 14px;
   background: var(--fundo-painel);
   border: 1px solid var(--borda);
-  border-radius: 10px;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+  z-index: 2;
 }
-.hud-presente { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--texto-suave); }
-.hud-presente #village-gift { display: flex; align-items: center; gap: 4px; color: var(--texto); font-weight: 700; }
-.hud-presente .icone-presente { width: 22px; height: 22px; }
-#controls.sem-combate #attack-btn,
-#controls.sem-combate #super-btn { display: none; }
+.painel-topo { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.painel-topo h2 { margin: 0; font-family: var(--fonte-titulo); font-size: 20px; color: var(--ouro); }
+.painel-topo button { width: 32px; height: 32px; padding: 0; background: none; border: none; font-size: 18px; color: var(--texto-suave); }
+.painel-atributos h3 { margin: 14px 0 8px; font-family: var(--fonte-titulo); font-size: 15px; font-weight: normal; color: var(--ouro); }
+.painel-atributos .stat { grid-template-columns: 86px 1fr 52px; }
+.painel-atributos .stat-valor span { margin-left: 4px; font-size: 11px; }
+.painel-item { display: flex; gap: 10px; align-items: center; }
+.painel-item ul { margin: 2px 0 0; padding: 0; list-style: none; font-size: 13px; }
+.bonus-mais { color: #8cf06a; }
+.bonus-menos { color: #ff7a6a; }
 
 /* ---------------------------------------------------------------- Criação do personagem */
 .tela-criacao { position: fixed; inset: 0; pointer-events: none; }
@@ -619,6 +652,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .opcao-nome { font-size: 14px; line-height: 1.25; }
 .opcao-nome small { display: block; font-size: 12px; color: var(--texto-suave); }
 .amostras { display: inline-flex; flex-shrink: 0; }
+.opcoes-cores .opcao { min-height: 56px; }
+.opcoes-cores .amostras i { width: 26px; height: 26px; margin-left: -7px; }
+.opcoes-cores .amostras i:first-child { margin-left: 0; }
 .amostras i {
   width: 18px;
   height: 18px;
