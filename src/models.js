@@ -494,10 +494,11 @@ function montarArco(rig, mao, d) {
 export function criarDuende(variante = 'normal') {
   const d = recursosDuende();
   const arqueiro = variante === 'arqueiro';
-  const rig = baseRig(arqueiro ? 'arqueiro' : 'duende');
+  const magico = variante === 'magico';
+  const rig = baseRig(arqueiro ? 'arqueiro' : magico ? 'duendeMago' : 'duende');
   const { corpo } = rig;
   // material de pele próprio para piscar ao ser atingido
-  const pele = toon(arqueiro ? 0x9bb53e : 0x6fae3c, { emissive: 0x000000 }, true);
+  const pele = toon(arqueiro ? 0x9bb53e : magico ? 0x8ab86a : 0x6fae3c, { emissive: 0x000000 }, true);
   rig.pele = pele;
 
   // pernas curtas e pés grandes
@@ -510,7 +511,7 @@ export function criarDuende(variante = 'normal') {
 
   // barriga redonda, túnica rasgada e cinto de corda
   corpo.add(parte(G.esfera, pele, { p: [0, 0.62, 0.02], s: [0.25, 0.27, 0.23] }));
-  corpo.add(parte(d.geoTunica, toon(arqueiro ? 0x2e4a24 : 0x7a4f2a, { side: THREE.DoubleSide }), { p: [0, 0.48, 0.01] }));
+  corpo.add(parte(d.geoTunica, toon(arqueiro ? 0x2e4a24 : magico ? 0x4a2a6a : 0x7a4f2a, { side: THREE.DoubleSide }), { p: [0, 0.48, 0.01] }));
   corpo.add(parte(G.toro(0.245, 0.025), d.cinto, { p: [0, 0.6, 0.01], r: [Math.PI / 2, 0, 0], contorno: false }));
 
   // cabeça grande: orelhas pontudas, nariz comprido, olhos amarelos e sorriso dentuço
@@ -530,6 +531,12 @@ export function criarDuende(variante = 'normal') {
   const corPalpebra = arqueiro ? 0x8aa236 : 0x5f9a33;
   cabeca.add(olho(R * 0.95, 0.1, 0.06, 0.065, corOlho, { raiva: corPalpebra, emissivo: true }));
   cabeca.add(olho(R * 0.95, -0.1, 0.06, 0.065, corOlho, { raiva: corPalpebra, emissivo: true }));
+  if (magico) {
+    // capuz de feiticeiro roxo, bem pontudo
+    const roxo = toon(0x5a2f80);
+    cabeca.add(parte(new THREE.SphereGeometry(R * 1.12, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.47), roxo, { p: [0, 0.02, -0.02], r: [-0.35, 0, 0] }));
+    cabeca.add(parte(G.cone(0.16, 0.55, 10), roxo, { p: [0, 0.32, -0.12], r: [-0.45, 0, 0] }));
+  }
   if (arqueiro) {
     // capuz de caçador com ponta caída para trás
     cabeca.add(parte(new THREE.SphereGeometry(R * 1.12, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.47), d.capuz, { p: [0, 0.02, -0.02], r: [-0.35, 0, 0] }));
@@ -560,6 +567,20 @@ export function criarDuende(variante = 'normal') {
       aljava.add(parte(G.cone(0.028, 0.08, 4), d.pena, { p: [x, 0.43, z], contorno: false, sombra: false }));
     }
     corpo.add(aljava);
+    rig.bracoE = be.pivo;
+    rig.bracoD = bd.pivo;
+    corpo.add(rig.bracoE, rig.bracoD);
+    return rig;
+  }
+  if (magico) {
+    // cajado torto com um orbe de veneno verde
+    const cajado = grupo(0, 0, 0.02);
+    cajado.add(parte(G.cil(0.018, 0.025, 0.9, 6), d.madeiraArco, { p: [0, 0.2, 0] }));
+    const orbe = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 10), new THREE.MeshStandardMaterial({ color: 0x9dff6a, emissive: 0x4ad02a, emissiveIntensity: 2 }));
+    orbe.position.y = 0.68;
+    cajado.add(orbe);
+    rig.orbe = orbe;
+    bd.mao.add(cajado);
     rig.bracoE = be.pivo;
     rig.bracoD = bd.pivo;
     corpo.add(rig.bracoE, rig.bracoD);
@@ -997,10 +1018,9 @@ export function criarGnomo({ roupa = 'azul', arma = 'espada', chefe = false } = 
   cabeca.add(parte(G.esfera, pele, { s: [R, R * 1.0, R * 0.95] }));
   for (const x of [R * 0.98, -R * 0.98]) cabeca.add(parte(G.esfera, pele, { p: [x, 0.0, -0.01], s: [0.035, 0.05, 0.03] }));
   cabeca.add(parte(G.esfera, toon(0xf0a088), { p: [0, -0.02, R * 0.98], s: [0.05, 0.045, 0.045] }));
-  cabeca.add(olho(R, 0.06, 0.035, 0.032, 0x3a6ad0));
-  cabeca.add(olho(R, -0.06, 0.035, 0.032, 0x3a6ad0));
-  cabeca.add(sobrancelha(0.062, 0.085, R * 0.9, 0.05, -0.15, branco));
-  cabeca.add(sobrancelha(-0.062, 0.085, R * 0.9, 0.05, 0.15, branco));
+  rig.olhos = [olho(R, 0.06, 0.035, 0.032, 0x3a6ad0), olho(R, -0.06, 0.035, 0.032, 0x3a6ad0)];
+  rig.sobrancelhas = [sobrancelha(0.062, 0.085, R * 0.9, 0.05, -0.15, branco), sobrancelha(-0.062, 0.085, R * 0.9, 0.05, 0.15, branco)];
+  cabeca.add(...rig.olhos, ...rig.sobrancelhas);
   const rubor = toon(0xff8a8a);
   cabeca.add(parte(G.esferaB, rubor, { p: [0.1, -0.02, R * 0.8], s: [0.03, 0.018, 0.01], r: [0, 0.6, 0], contorno: false, sombra: false }));
   cabeca.add(parte(G.esferaB, rubor, { p: [-0.1, -0.02, R * 0.8], s: [0.03, 0.018, 0.01], r: [0, -0.6, 0], contorno: false, sombra: false }));
@@ -1095,7 +1115,7 @@ const suave = (x) => x * x * (3 - 2 * x);
  * @param ataque    progresso do ataque 0..1, ou -1 se não estiver atacando
  */
 // comprimento de um passo (m) de cada personagem: o ciclo da caminhada acompanha o chão
-const PASSADA = { duende: 0.5, arqueiro: 0.5, assassino: 0.85, maga: 0.65, chefao: 1.25, heroi: 0.78, gnomo: 0.36, gnomoChefe: 0.42 };
+const PASSADA = { duende: 0.5, arqueiro: 0.5, duendeMago: 0.5, assassino: 0.85, maga: 0.65, chefao: 1.25, heroi: 0.78, gnomo: 0.36, gnomoChefe: 0.42 };
 
 export function animarRig(rig, dt, t, andar, ataque = -1) {
   // a fase avança pela distância realmente percorrida, então os pés não deslizam;
@@ -1223,6 +1243,12 @@ export function animarRig(rig, dt, t, andar, ataque = -1) {
       rig.corpo.rotation.y = volta * 0.45;
       if (cotD) cotD.rotation.x = -0.5 + a * 0.4;
     }
+  } else if (rig.tipo === 'duendeMago') {
+    // aponta o cajado e lança o veneno
+    const a = Math.sin(Math.min(1, p) * Math.PI);
+    rig.bracoD.rotation.x = -0.4 - a * 1.3;
+    rig.bracoE.rotation.x = -a * 0.7;
+    rig.corpo.rotation.x = -a * 0.1;
   } else if (rig.tipo === 'gnomo' && rig.arma === 'magia') {
     // ergue as mãos e bate a pedra no chão para chamar os espinhos de terra
     const sobe = suave(Math.min(1, p / 0.55));

@@ -656,7 +656,52 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .dialogo-nome { font-family: var(--fonte-titulo); font-size: 18px; color: var(--ouro); }
 .dialogo p { margin: 8px 0 4px; font-size: 15px; line-height: 1.45; }
-.dialogo .botao-secundario { margin-top: 6px; padding: 8px 16px; font-size: 14px; }
+.dialogo p { min-height: 2.9em; font-size: 17px; }
+.dialogo p.entra { animation: fala-entra 0.35s ease-out; }
+@keyframes fala-entra { from { opacity: 0; transform: translateY(4px); } }
+.dialogo-botoes { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; min-height: 8px; }
+.botao-continuar {
+  padding: 8px 16px;
+  font-size: 14px;
+  color: var(--ouro);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+}
+.botao-opcao {
+  min-width: 96px;
+  padding: 10px 22px;
+  font-family: var(--fonte-titulo);
+  font-size: 17px;
+  font-weight: 700;
+  color: #1a1206;
+  background: linear-gradient(#f3d58a, var(--ouro) 55%, #b88d3b);
+  border: none;
+  border-radius: 10px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+}
+.botao-opcao[data-opcao="nao"] { color: var(--texto); background: rgba(150, 40, 50, 0.55); border: 1px solid rgba(220, 90, 100, 0.5); }
+.botao-continuar:active, .botao-opcao:active { transform: scale(0.96); }
+/* contador de duendes do castelo, no alto, no meio */
+.contador-castelo {
+  position: absolute;
+  left: 50%;
+  top: calc(14px + var(--sat));
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  font-family: var(--fonte-titulo);
+  font-size: 15px;
+  color: #b8f07a;
+  background: var(--fundo-painel);
+  border: 1px solid var(--borda);
+  border-radius: 16px;
+  white-space: nowrap;
+}
+.dano.veneno { color: #8aff4a; font-size: 18px; }
+.dano.pensamento { color: #fff; font-size: 34px; }
+.dano.risada { color: #ffe27a; font-size: 26px; }
+#hurt-vignette.veneno { background: radial-gradient(ellipse at center, transparent 45%, rgba(60, 200, 30, 0.55) 100%); animation: vinheta 0.8s ease-out; }
+.barra-vida .preenchimento.envenenado { background: linear-gradient(#9be04c, #4a8a24); }
 .dano.alerta { color: #ffd23a; font-size: 30px; }
 .bonus-mais { color: #8cf06a; }
 .bonus-menos { color: #ff7a6a; }

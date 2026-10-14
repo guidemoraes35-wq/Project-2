@@ -269,3 +269,41 @@ export const GNOMO_CHEFE = {
   z: 2.7,                 // na praça, ao lado do poço
   distanciaConversa: 3,
 };
+
+// ------------------------------------------------------------------ Castelo dos duendes
+// Os duendes do castelo começam parados e atacam quando o herói chega perto.
+export const CASTELO = {
+  alerta: 13,  // distância em que um duende nota o herói
+};
+
+export const DUENDE_FRACO = {
+  nome: 'Duende',
+  vida: 20, poder: 5, velocidade: 20, defesa: 5, inteligencia: 0,
+  quantidade: 30,
+  atributoAtaque: 'poder',
+  alcance: 1.3, recarga: 1.2, preparo: 0.45, duracaoAtaque: 0.8,
+  raio: 0.36, escala: 0.85, alturaAcerto: 0.6,
+};
+
+export const ARQUEIRO_CASTELO = {
+  nome: 'Duende Arqueiro',
+  vida: 20, poder: 8, velocidade: 15, defesa: 0, inteligencia: 0,
+  quantidade: 8,
+  atributoAtaque: 'poder',
+  distancia: true,
+  alcance: 14, distanciaIdeal: 9, recarga: 2.3, preparo: 0.8, duracaoAtaque: 1.1,
+  velocidadeFlecha: 17,
+  raio: 0.38, escala: 0.9, alturaAcerto: 0.65,
+};
+
+/** Duende mágico: o veneno não machuca no contato, mas tira 1 de vida por segundo por 3 s. */
+export const DUENDE_MAGICO = {
+  nome: 'Duende Mágico',
+  vida: 5, poder: 5, velocidade: 30, defesa: 5, inteligencia: 20,
+  quantidade: 6,
+  distancia: true,
+  alcance: 10, distanciaIdeal: 6.5, recarga: 3, preparo: 0.6, duracaoAtaque: 0.9,
+  velocidadeVeneno: 9,
+  veneno: { dano: 1, duracao: 3 },
+  raio: 0.34, escala: 0.85, alturaAcerto: 0.6,
+};

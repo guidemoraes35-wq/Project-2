@@ -38,7 +38,121 @@ export function criarPovoGnomo(ctx) {
   chefeRig.root.position.set(GNOMO_CHEFE.x, 0, GNOMO_CHEFE.z);
   scene.add(chefeRig.root);
   vilarejo.addCirculo(GNOMO_CHEFE.x, GNOMO_CHEFE.z, 0.45);
-  const chefe = { rig: chefeRig, pos: chefeRig.root.position, dir: 0 };
+  const chefe = { rig: chefeRig, pos: chefeRig.root.position, dir: 0, expressao: null, exprT: 0, olharPara: null };
+
+  /** Muda a expressão do chefe (null = parado normal). */
+  function expressar(nome) {
+    if (chefe.expressao === nome) return;
+    chefe.expressao = nome;
+    chefe.exprT = 0;
+    tmp.copy(chefe.pos).setY(2.0);
+    if (nome === 'surpreso') {
+      numeros.mostrar(tmp, '!!', 'alerta');
+      particulas.emitir(tmp.setY(1.6), 0xffffff, 18, { vel: 3, vida: 0.5 });
+    } else if (nome === 'lembrando' || nome === 'pensando') {
+      numeros.mostrar(tmp, '…', 'pensamento');
+    } else if (nome === 'bravo') {
+      numeros.mostrar(tmp, '💢', 'alerta');
+    }
+  }
+
+  /** Gestos e caretas por cima da animação parada. */
+  function aplicarExpressao(dt, t) {
+    const r = chefe.rig;
+    const e = chefe.expressao;
+    chefe.exprT += dt;
+    const k = Math.min(1, chefe.exprT * 5); // entra suave
+    const [oE, oD] = r.olhos;
+    const [sE, sD] = r.sobrancelhas;
+    let olho = 1, sob = 0;
+    const cotE = r.bracoE.userData.cotovelo, cotD = r.bracoD.userData.cotovelo;
+    if (e === 'desconfiado') {
+      // aperta os olhos e se inclina para olhar melhor
+      olho = 0.45;
+      sob = -0.012;
+      r.corpo.rotation.x += 0.18 * k;
+      r.cabeca.rotation.x += 0.12 * k;
+      r.cabeca.rotation.z = Math.sin(t * 1.3) * 0.12 * k;
+    } else if (e === 'surpreso') {
+      // pulinho para trás, olhos arregalados e braços para cima
+      olho = 1.45;
+      sob = 0.03;
+      const pulo = Math.max(0, Math.sin(Math.min(1, chefe.exprT / 0.35) * Math.PI));
+      r.corpo.position.y += pulo * 0.18;
+      r.corpo.rotation.x -= 0.18 * k;
+      r.bracoE.rotation.set(-2.5 * k, 0, 0.5 * k);
+      r.bracoD.rotation.set(-2.5 * k, 0, -0.5 * k);
+      r.cabeca.rotation.x -= 0.15 * k;
+    } else if (e === 'lembrando') {
+      // olha para cima de lado, mão no queixo
+      olho = 0.9;
+      sob = 0.015;
+      r.cabeca.rotation.x -= 0.32 * k;
+      r.cabeca.rotation.z = 0.22 * k;
+      r.cabeca.rotation.y = 0.25 * k;
+      r.bracoE.rotation.set(-1.15 * k, 0, -0.75 * k);
+      if (cotE) cotE.rotation.x = -2.1 * k;
+    } else if (e === 'pensando') {
+      // mão no queixo batucando, cabeça balançando de um lado para o outro
+      olho = 0.8;
+      r.cabeca.rotation.z = Math.sin(t * 2.2) * 0.2 * k;
+      r.cabeca.rotation.x -= 0.1 * k;
+      r.corpo.rotation.y = Math.sin(t * 1.1) * 0.25 * k;
+      r.bracoE.rotation.set(-1.15 * k, 0, -0.75 * k);
+      if (cotE) cotE.rotation.x = (-2.1 + Math.abs(Math.sin(t * 7)) * 0.3) * k;
+    } else if (e === 'perguntando') {
+      // braços abertos, cabeça inclinada
+      sob = 0.02;
+      r.bracoE.rotation.set(-0.6 * k, 0, 0.75 * k);
+      r.bracoD.rotation.set(-0.6 * k, 0, -0.75 * k);
+      r.cabeca.rotation.z = 0.2 * k;
+    } else if (e === 'rindo') {
+      // cabeça para trás, mãos na barriga, corpo sacudindo
+      olho = 0.25;
+      r.cabeca.rotation.x -= 0.4 * k;
+      r.corpo.position.y += Math.abs(Math.sin(t * 18)) * 0.05;
+      r.corpo.rotation.x -= 0.12 * k;
+      r.bracoE.rotation.set(-0.5 * k, 0, -0.35 * k);
+      r.bracoD.rotation.set(-0.5 * k, 0, 0.35 * k);
+      if (Math.floor(chefe.exprT * 3) !== Math.floor((chefe.exprT - dt) * 3)) {
+        tmp.copy(chefe.pos).setY(2.0 + Math.random() * 0.3);
+        tmp.x += (Math.random() - 0.5) * 0.8;
+        numeros.mostrar(tmp, 'HA', 'risada');
+      }
+    } else if (e === 'bravo') {
+      // punho erguido sacudindo e pezinho batendo
+      olho = 0.75;
+      sob = -0.015;
+      r.bracoE.rotation.set(-2.6 * k + Math.sin(t * 22) * 0.15, 0, 0.2 * k);
+      if (cotE) cotE.rotation.x = -0.9 * k;
+      r.corpo.position.y += Math.max(0, Math.sin(t * 12)) * 0.03;
+    } else if (e === 'misterioso') {
+      // sorriso de canto, olhos semicerrados, alisando a barba
+      olho = 0.55;
+      sob = -0.008;
+      r.cabeca.rotation.z = -0.15 * k;
+      r.bracoE.rotation.set(-0.95 * k, 0, -0.6 * k);
+      if (cotE) cotE.rotation.x = (-1.6 + Math.sin(t * 3) * 0.25) * k;
+    }
+    oE.scale.y = oD.scale.y = olho;
+    oE.scale.x = oD.scale.x = e === 'surpreso' ? 1.3 : 1;
+    sE.position.y = sD.position.y = 0.085 + sob;
+  }
+
+  /** O chefe solta um raio de energia verde do cajado no herói. */
+  function raioMortal(alvo) {
+    const origem = new THREE.Vector3();
+    chefe.rig.cristal.getWorldPosition(origem);
+    const destino = new THREE.Vector3(alvo.x, 1, alvo.z);
+    for (let i = 0; i <= 12; i++) {
+      tmp.lerpVectors(origem, destino, i / 12);
+      tmp.x += (Math.random() - 0.5) * 0.3;
+      tmp.y += (Math.random() - 0.5) * 0.3;
+      particulas.emitir(tmp, i % 2 ? 0x7dff6a : 0xeaffd8, 6, { vel: 1.5, vida: 0.7 });
+    }
+    particulas.emitir(destino, 0x7dff6a, 70, { vel: 6, vida: 1, subir: 1 });
+    ctx.tremor?.(0.6);
+  }
 
   function criar(perto = null) {
     const p = vilarejo.pontoLivre(0.6, perto, perto ? 12 : 0);
@@ -399,6 +513,7 @@ export function criarPovoGnomo(ctx) {
     }
     chefe.rig.root.rotation.y = chefe.dir;
     animarRig(chefe.rig, dt, t, 0);
+    aplicarExpressao(dt, t);
     if (chefe.rig.cristal) chefe.rig.cristal.rotation.y = t * 1.5;
   }
 
@@ -409,5 +524,9 @@ export function criarPovoGnomo(ctx) {
     atualizar,
     atacar,
     acalmar,
+    expressar,
+    raioMortal,
+    /** Gnomos vivos (para a mira automática do herói). */
+    alvos: () => gnomos.filter((g) => !g.morto),
   };
 }

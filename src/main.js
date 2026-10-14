@@ -11,6 +11,9 @@ import { criarPortal } from './portal.js';
 import { criarEstudio } from './estudio.js';
 import { criarVilarejo } from './vilarejo.js';
 import { criarPovoGnomo } from './gnomos.js';
+import { criarCastelo } from './castelo.js';
+import { criarDuendesCastelo } from './duendesCastelo.js';
+import { CONVERSA_CHEFE, CONVERSA_CHEFE_SIM, CONVERSA_CHEFE_NAO, CONVERSA_CHEFE_LEMBRETE, CONVERSA_CHEFE_VITORIA } from './conversas.js';
 
 // ------------------------------------------------------------------ Elementos
 const $ = (id) => document.getElementById(id);
@@ -1158,13 +1161,24 @@ function atualizarCamera(dt, t) {
   cam.yaw -= olhar.dx * 0.006;
   cam.pitch = THREE.MathUtils.clamp(cam.pitch + olhar.dy * 0.004, 0.08, 1.2);
 
-  const foco = estado === 'vilarejo' ? heroi.pos : jogador.pos;
-  alvoCam.set(foco.x, 1.3, foco.z);
+  let foco = heroi && (estado === 'aventura' || estado === 'portal') ? heroi.pos : jogador.pos;
+  // na conversa, a câmera chega mais perto e gira de lado para mostrar os dois rostos
+  const k = Math.min(1, dt * 2.5);
+  cam.zoom = (cam.zoom ?? 1) + ((conversa?.com ? 0.62 : 1) - (cam.zoom ?? 1)) * k;
+  if (conversa?.com) {
+    const c = conversa.com;
+    const alvoYaw = Math.atan2(heroi.pos.x - c.x, heroi.pos.z - c.z) + 1.15;
+    cam.yaw += difAngulo(cam.yaw, alvoYaw) * k;
+    cam.pitch += (0.16 - cam.pitch) * k;
+    foco = tmp2.set((heroi.pos.x + c.x) / 2, 0, (heroi.pos.z + c.z) / 2);
+  }
+  alvoCam.set(foco.x, 1.3 - (1 - (cam.zoom ?? 1)) * 0.6, foco.z);
+  const dist = cam.dist * (cam.zoom ?? 1);
   const cp = Math.cos(cam.pitch);
   camera.position.set(
-    alvoCam.x + Math.sin(cam.yaw) * cp * cam.dist,
-    alvoCam.y + Math.sin(cam.pitch) * cam.dist,
-    alvoCam.z + Math.cos(cam.yaw) * cp * cam.dist
+    alvoCam.x + Math.sin(cam.yaw) * cp * dist,
+    alvoCam.y + Math.sin(cam.pitch) * dist,
+    alvoCam.z + Math.cos(cam.yaw) * cp * dist
   );
   if (tremor > 0) {
     tremor = Math.max(0, tremor - dt);
@@ -1420,33 +1434,59 @@ function cameraCriacao(dt) {
   camera.lookAt(0, 1.2, 0);
 }
 
-// ------------------------------------------------------------------ Vilarejo
-let povo = null; // gnomos do vilarejo
+// ------------------------------------------------------------------ Aventura (vilarejo e castelo)
+// Depois da criação, o herói anda por "mapas": o vilarejo e o castelo dos duendes.
+// Cada mapa tem os seus personagens (gnomos ou duendes) e os seus portais.
+let povo = null;             // gnomos do vilarejo
+let castelo = null;          // mapa do castelo dos duendes
+let duendesCastelo = null;   // inimigos do castelo
+let mapa = null;             // mapa onde o herói está
+let inimigos = null;         // personagens do mapa atual (gnomos ou duendes)
+let portais = [];            // { portal, mapa, destino }
+let missaoAceita = false;    // o herói aceitou ajudar os gnomos
+let casteloLivre = false;    // todos os duendes do castelo foram derrotados
+
+const POSICAO_PORTAL_VILA = { x: -3, z: -29 }; // no fundo da vila, perto do moinho
+
+function contexto(scene, extra) {
+  return {
+    scene,
+    particulas,
+    numeros,
+    camera,
+    heroi: () => heroi,
+    heroiVisivel: () => !!heroi && heroi.vivo && !conversa,
+    danoHeroi,
+    envenenar,
+    tremor: (v) => { tremor = Math.max(tremor, v); },
+    ...extra,
+  };
+}
+
+function prepararVilarejo() {
+  if (vilarejo) return;
+  vilarejo = criarVilarejo();
+  povo = criarPovoGnomo(contexto(vilarejo.scene, { vilarejo }));
+  povo.reiniciar();
+}
+
+function prepararCastelo() {
+  if (castelo) return;
+  castelo = criarCastelo();
+  duendesCastelo = criarDuendesCastelo(contexto(castelo.scene, { mapa: castelo }));
+  duendesCastelo.reiniciar();
+}
 
 function mostrarVilarejo() {
-  if (!vilarejo) {
-    vilarejo = criarVilarejo();
-    povo = criarPovoGnomo({
-      scene: vilarejo.scene,
-      vilarejo,
-      particulas,
-      numeros,
-      camera,
-      heroi: () => heroi,
-      heroiVisivel: () => !!heroi && heroi.vivo,
-      danoHeroi,
-      tremor: (v) => { tremor = Math.max(tremor, v); },
-    });
-  }
+  prepararVilarejo();
   removerPrevia();
   removerHeroi();
   camera.clearViewOffset();
-  const { x, z, dir } = vilarejo.inicio;
   heroi = {
     rig: null,
     escolha: { ...escolha },
     pos: null,
-    dir,
+    dir: vilarejo.inicio.dir,
     andar: 0,
     raio: 0.4,
     recarga: 0,
@@ -1460,36 +1500,66 @@ function mostrarVilarejo() {
     invul: 0,
     semDano: 0,
     regenT: 0,
+    veneno: null,
   };
-  montarRigHeroi(x, z);
   aplicarAtributos();
   heroi.hp = heroi.hpMax;
-  povo.reiniciar();
   montarPainelAtributos();
-  trocarCena(vilarejo.scene);
-  estado = 'vilarejo';
-  cam.yaw = 0;
-  cam.pitch = 0.38;
   telaCriacao.classList.add('hidden');
   hud.classList.add('modo-vilarejo');
   hud.classList.remove('hidden', 'com-chefao');
   controles.classList.add('sem-super');
-  controles.classList.remove('hidden');
   $('stats-panel').classList.add('hidden');
-  $('dialog').classList.add('hidden');
   $('hud-name').textContent = 'Herói';
+  entrarNoMapa('vilarejo', vilarejo.inicio);
+  mostrarAviso('Bem-vindo ao Vilarejo!');
+  mostrarDica('Fale com o Gnomo Chefe na praça. Os gnomos são pacíficos… se ninguém os provocar.');
+}
+
+/** Coloca o herói num mapa ('vilarejo' ou 'castelo') no ponto indicado. */
+function entrarNoMapa(nome, { x, z, dir }) {
+  if (nome === 'castelo') prepararCastelo();
+  mapa = nome === 'castelo' ? castelo : vilarejo;
+  inimigos = nome === 'castelo' ? duendesCastelo : povo;
+  mapa.nome = nome;
+  heroi.dir = dir;
+  heroi.vx = heroi.vz = 0;
+  montarRigHeroi(x, z);
+  trocarCena(mapa.scene);
+  estado = 'aventura';
+  cam.yaw = dir - Math.PI;
+  cam.pitch = 0.38;
+  encerrarConversa();
+  controles.classList.remove('hidden');
+  $('castle-count').classList.toggle('hidden', nome !== 'castelo');
+  atualizarContadorCastelo();
   atualizarHUDHeroi();
   input.reiniciar();
-  mostrarAviso('Bem-vindo ao Vilarejo!');
-  const dica = $('hint');
-  dica.textContent = 'Fale com o Gnomo Chefe na praça. Os gnomos são pacíficos… se ninguém os provocar.';
-  dica.classList.remove('hidden', 'some');
-  setTimeout(() => dica.classList.add('some'), 6000);
   tmp.set(x, 1, z);
   particulas.emitir(tmp, 0x9dff8a, 70, { vel: 4, vida: 1, subir: 1 });
 }
 
-/** (Re)cria o modelo do herói com os itens equipados, no lugar indicado. */
+function mostrarCastelo() {
+  entrarNoMapa('castelo', castelo ? castelo.inicio : { x: 0, z: 1.5, dir: Math.PI });
+  if (!casteloLivre) {
+    mostrarAviso('O Castelo dos Duendes');
+    mostrarDica('Derrote todos os duendes. Cuidado com o veneno dos duendes mágicos!');
+  }
+}
+
+function voltarAoVilarejo() {
+  entrarNoMapa('vilarejo', { x: POSICAO_PORTAL_VILA.x + 2, z: POSICAO_PORTAL_VILA.z + 3, dir: 0 });
+}
+
+function mostrarDica(texto) {
+  const dica = $('hint');
+  dica.textContent = texto;
+  dica.classList.remove('hidden', 'some');
+  clearTimeout(mostrarDica.timer);
+  mostrarDica.timer = setTimeout(() => dica.classList.add('some'), 6000);
+}
+
+/** (Re)cria o modelo do herói com os itens equipados, no lugar indicado do mapa atual. */
 function montarRigHeroi(x, z) {
   if (heroi.rig) {
     heroi.rig.root.parent?.remove(heroi.rig.root);
@@ -1498,7 +1568,7 @@ function montarRigHeroi(x, z) {
   const rig = criarHeroi({ ...heroi.escolha, itens: heroi.equipados });
   rig.root.position.set(x, 0, z);
   rig.root.rotation.y = heroi.dir;
-  vilarejo.scene.add(rig.root);
+  (mapa ? mapa.scene : vilarejo.scene).add(rig.root);
   heroi.rig = rig;
   heroi.pos = rig.root.position;
 }
@@ -1524,7 +1594,14 @@ function atualizarHUDHeroi() {
   const f = Math.max(0, heroi.hp / heroi.hpMax);
   $('hp-fill').style.width = `${f * 100}%`;
   $('hp-fill').classList.toggle('baixa', f <= 0.3);
+  $('hp-fill').classList.toggle('envenenado', !!heroi.veneno);
   $('hp-text').textContent = `${Math.max(0, Math.ceil(heroi.hp))} / ${heroi.hpMax}`;
+}
+
+function atualizarContadorCastelo() {
+  if (!duendesCastelo) return;
+  const n = duendesCastelo.restantes();
+  $('castle-count').textContent = n > 0 ? `Duendes restantes: ${n}` : 'Castelo libertado!';
 }
 
 function danoHeroi(dano, origem) {
@@ -1538,19 +1615,62 @@ function danoHeroi(dano, origem) {
   tmp.copy(h.pos).setY(1.9);
   numeros.mostrar(tmp, dano, 'jogador');
   particulas.emitir(tmp.setY(1.2), 0xff2222, 12, { vel: 3, vida: 0.5, gravidade: 8 });
-  const v = $('hurt-vignette');
-  v.classList.remove('pisca');
-  void v.offsetWidth;
-  v.classList.add('pisca');
+  piscarVinheta('pisca');
   tmp.subVectors(h.pos, origem).setY(0).normalize();
   h.pos.addScaledVector(tmp, 0.35);
-  if (h.hp <= 0) {
-    h.vivo = false;
-    h.mortoT = 0;
-    povo.acalmar();
-    mostrarAviso('Você foi derrotado!');
-  }
+  if (h.hp <= 0) derrubarHeroi('Você foi derrotado!');
   atualizarHUDHeroi();
+}
+
+function piscarVinheta(classe) {
+  const v = $('hurt-vignette');
+  v.classList.remove('pisca', 'veneno');
+  void v.offsetWidth;
+  v.classList.add(classe);
+}
+
+function derrubarHeroi(aviso) {
+  const h = heroi;
+  h.hp = 0;
+  h.vivo = false;
+  h.mortoT = 0;
+  h.veneno = null;
+  inimigos.acalmar();
+  mostrarAviso(aviso);
+  atualizarHUDHeroi();
+}
+
+/** Veneno: não machuca no contato; tira `dano` de vida por segundo durante `duracao` s. */
+function envenenar(dano, duracao) {
+  const h = heroi;
+  if (!h || !h.vivo) return;
+  h.veneno = { dano, restante: duracao, t: 0 };
+  tmp.copy(h.pos).setY(2.0);
+  numeros.mostrar(tmp, 'Envenenado!', 'veneno');
+  piscarVinheta('veneno');
+  atualizarHUDHeroi();
+}
+
+function atualizarVeneno(dt) {
+  const h = heroi;
+  if (!h.veneno) return;
+  h.veneno.t += dt;
+  if (Math.random() < 0.4) {
+    tmp.set(h.pos.x + (Math.random() - 0.5) * 0.5, 0.6 + Math.random() * 1.2, h.pos.z + (Math.random() - 0.5) * 0.5);
+    particulas.emitir(tmp, 0x7dff3a, 1, { vel: 0.4, vida: 0.7, subir: 1 });
+  }
+  while (h.veneno && h.veneno.t >= 1) {
+    h.veneno.t -= 1;
+    h.veneno.restante -= 1;
+    h.hp -= h.veneno.dano;
+    h.semDano = 0;
+    h.regenT = 0;
+    tmp.copy(h.pos).setY(1.9);
+    numeros.mostrar(tmp, h.veneno.dano, 'veneno');
+    if (h.hp <= 0) derrubarHeroi('O veneno te derrubou!');
+    else if (h.veneno.restante <= 0) h.veneno = null;
+    atualizarHUDHeroi();
+  }
 }
 
 // ataque do herói: o golpe acerta no meio da animação
@@ -1566,18 +1686,20 @@ function atualizarHeroi(dt, t) {
   const h = heroi;
   h.invul = Math.max(0, h.invul - dt);
   if (!h.vivo) {
-    // caído: depois de um tempo, levanta de novo na entrada do vilarejo
+    // caído: depois de um tempo, levanta de novo na entrada do mapa
     h.mortoT += dt;
     h.rig.root.rotation.x = Math.max(-Math.PI / 2, h.rig.root.rotation.x - dt * 4);
     animarRig(h.rig, dt, t, 0);
     if (h.mortoT > 2.5) {
-      const { x, z, dir } = vilarejo.inicio;
+      const { x, z, dir } = mapa.inicio;
       h.pos.set(x, 0, z);
       h.dir = dir;
+      h.vx = h.vz = 0;
       h.rig.root.rotation.x = 0;
       h.vivo = true;
       h.hp = h.hpMax;
       h.invul = 1.5;
+      cam.yaw = dir - Math.PI;
       atualizarHUDHeroi();
       tmp.set(x, 1, z);
       particulas.emitir(tmp, 0x9dff8a, 50, { vel: 3, vida: 0.9, subir: 1 });
@@ -1585,16 +1707,17 @@ function atualizarHeroi(dt, t) {
     return;
   }
   const atacando = h.ataqueT >= 0;
-  const mag = moverPelaCamera(h, h.velocidade * (atacando ? 0.5 : 1), dt, !atacando);
-  vilarejo.resolverColisao(h.pos, h.raio);
+  // durante uma conversa o herói fica parado, olhando para quem fala
+  const mag = conversa ? moverPelaCamera(h, 0, dt, false) : moverPelaCamera(h, h.velocidade * (atacando ? 0.5 : 1), dt, !atacando);
+  if (conversa?.com) h.dir = girarPara(h.dir, Math.atan2(conversa.com.x - h.pos.x, conversa.com.z - h.pos.z), dt * 6);
+  mapa.resolverColisao(h.pos, h.raio);
   h.andar += (mag - h.andar) * Math.min(1, dt * 10);
 
   h.recarga -= dt;
-  if (input.atacando() && h.recarga <= 0 && !atacando) {
-    // mira automática no gnomo mais próximo à frente
+  if (!conversa && input.atacando() && h.recarga <= 0 && !atacando) {
+    // mira automática no inimigo mais próximo
     let alvo = null, melhor = 3;
-    for (const g of povo.gnomos) {
-      if (g.morto) continue;
+    for (const g of inimigos.alvos()) {
       const d = distXZ(g.pos, h.pos);
       if (d < melhor) { melhor = d; alvo = g; }
     }
@@ -1607,29 +1730,167 @@ function atualizarHeroi(dt, t) {
     h.ataqueT += dt;
     if (!h.acertou && h.ataqueT >= ATAQUE_HEROI.acerto) {
       h.acertou = true;
-      povo.atacar(h.pos, h.dir, ATAQUE_HEROI.alcance, ATAQUE_HEROI.arco, ataqueDoHeroi());
+      if (inimigos.atacar(h.pos, h.dir, ATAQUE_HEROI.alcance, ATAQUE_HEROI.arco, ataqueDoHeroi()) && mapa === castelo) {
+        atualizarContadorCastelo();
+      }
     }
     if (h.ataqueT >= ATAQUE_HEROI.duracao) h.ataqueT = -1;
   }
   regenerar(h, dt);
+  atualizarVeneno(dt);
+  if (!h.vivo) return;
   h.rig.root.rotation.y = h.dir;
   animarRig(h.rig, dt, t, h.andar, h.ataqueT >= 0 ? h.ataqueT / ATAQUE_HEROI.duracao : -1);
   h.rig.root.visible = h.invul <= 0 || Math.floor(h.invul * 20) % 2 === 0;
   $('attack-cd').style.transform = `scaleY(${Math.max(0, h.recarga) / ATAQUE_HEROI.recarga})`;
 
   // perto do Gnomo Chefe aparece o botão de conversar
-  const perto = distXZ(h.pos, povo.chefe.pos) < GNOMO_CHEFE.distanciaConversa;
-  $('talk-btn').classList.toggle('hidden', !perto || !$('dialog').classList.contains('hidden'));
+  const perto = mapa === vilarejo && distXZ(h.pos, povo.chefe.pos) < GNOMO_CHEFE.distanciaConversa;
+  $('talk-btn').classList.toggle('hidden', !perto || !!conversa);
 }
 
-// ------------------------------------------------------------------ Conversa com o Gnomo Chefe
-// O texto completo da conversa será definido depois.
-$('talk-btn').addEventListener('click', () => {
-  $('dialog-text').textContent = 'Olá, jovem aventureiro! Eu sou o chefe dos gnomos deste vilarejo. Que bom que você atravessou o portal… Temos muito o que conversar.';
-  $('dialog').classList.remove('hidden');
+/** Portais do mapa atual: girar, brilhar e levar o herói quando ele entra. */
+function atualizarPortais(dt) {
+  for (const p of portais) {
+    if (p.mapa !== mapa) continue;
+    p.portal.atualizar(dt, particulas);
+    if (heroi.vivo && !conversa && estado === 'aventura' && p.portal.abertura >= 1 && distXZ(heroi.pos, p.portal) < 1.1) {
+      estado = 'portal';
+      controles.classList.add('hidden');
+      input.reiniciar();
+      transicao(p.destino);
+      return;
+    }
+  }
+  // castelo livre: abre o portal de volta para a vila
+  if (mapa === castelo && !casteloLivre && duendesCastelo.restantes() === 0) {
+    casteloLivre = true;
+    atualizarContadorCastelo();
+    const { x, z } = castelo.centro;
+    portais.push({ portal: criarPortal(castelo.scene, x, z, 0), mapa: castelo, destino: voltarAoVilarejo });
+    mostrarAviso('Castelo libertado!');
+    mostrarDica('Um portal de volta para a vila se abriu no meio do pátio.');
+  }
+}
+
+// ------------------------------------------------------------------ Conversas
+// Regra para qualquer conversa: os botões de movimento e ataque somem e o herói fica parado.
+let conversa = null; // { falas, i, nome, com, aoEscolher, aoTerminar, expressar, auto }
+
+function iniciarConversa(falas, { nome, com = null, expressar = null, aoEscolher = null, aoTerminar = null }) {
+  conversa = { falas, i: 0, nome, com, expressar, aoEscolher, aoTerminar, auto: -1 };
+  controles.classList.add('hidden');
   $('talk-btn').classList.add('hidden');
+  $('stats-panel').classList.add('hidden');
+  input.reiniciar();
+  $('dialog').classList.remove('hidden');
+  mostrarFala();
+}
+
+function mostrarFala() {
+  const c = conversa;
+  const fala = c.falas[c.i];
+  $('dialog-name').textContent = c.nome;
+  $('dialog-text').textContent = fala.texto;
+  c.expressar?.(fala.expressao || null);
+  c.auto = fala.auto ?? -1;
+  const botoes = $('dialog-buttons');
+  if (fala.opcoes) {
+    botoes.innerHTML = fala.opcoes.map((o) => `<button class="botao-opcao" data-opcao="${o.id}">${o.texto}</button>`).join('');
+  } else if (fala.auto) {
+    botoes.innerHTML = '';
+  } else {
+    botoes.innerHTML = '<button class="botao-continuar" data-opcao="continuar">Continuar ▸</button>';
+  }
+  // reinicia a animação de entrada do texto
+  const p = $('dialog-text');
+  p.classList.remove('entra');
+  void p.offsetWidth;
+  p.classList.add('entra');
+}
+
+function avancarConversa(opcao = 'continuar') {
+  const c = conversa;
+  if (!c) return;
+  if (opcao !== 'continuar') {
+    // a resposta pode trocar as próximas falas
+    c.aoEscolher?.(opcao);
+    return;
+  }
+  if (c.i < c.falas.length - 1) {
+    c.i++;
+    mostrarFala();
+  } else {
+    const fim = c.aoTerminar;
+    encerrarConversa();
+    fim?.();
+  }
+}
+
+/** Continua a conversa com outras falas (depois de uma escolha). */
+function continuarConversa(falas, aoTerminar) {
+  conversa.falas = falas;
+  conversa.i = 0;
+  conversa.aoTerminar = aoTerminar;
+  mostrarFala();
+}
+
+function encerrarConversa() {
+  if (!conversa) return;
+  conversa.expressar?.(null);
+  conversa = null;
+  $('dialog').classList.add('hidden');
+  if (estado === 'aventura') controles.classList.remove('hidden');
+}
+
+function atualizarConversa(dt) {
+  if (!conversa || conversa.auto < 0) return;
+  conversa.auto -= dt;
+  if (conversa.auto <= 0) {
+    conversa.auto = -1;
+    avancarConversa();
+  }
+}
+
+$('dialog-buttons').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-opcao]');
+  if (b) avancarConversa(b.dataset.opcao);
 });
-$('dialog-close').addEventListener('click', () => $('dialog').classList.add('hidden'));
+
+// ------------------------------------------------------------------ Conversa com o Gnomo Chefe
+function conversarComChefe() {
+  const base = { nome: GNOMO_CHEFE.nome, com: povo.chefe.pos, expressar: povo.expressar };
+  if (casteloLivre) {
+    iniciarConversa(CONVERSA_CHEFE_VITORIA, base);
+  } else if (missaoAceita) {
+    iniciarConversa(CONVERSA_CHEFE_LEMBRETE, base);
+  } else {
+    iniciarConversa(CONVERSA_CHEFE, {
+      ...base,
+      aoEscolher(resposta) {
+        if (resposta === 'sim') {
+          continuarConversa(CONVERSA_CHEFE_SIM, abrirPortalDaVila);
+        } else {
+          // o chefe ri… e acaba com o herói na hora
+          continuarConversa(CONVERSA_CHEFE_NAO, () => {
+            povo.raioMortal(heroi.pos);
+            derrubarHeroi('O Gnomo Chefe acabou com você!');
+          });
+        }
+      },
+    });
+  }
+}
+
+function abrirPortalDaVila() {
+  missaoAceita = true;
+  const { x, z } = POSICAO_PORTAL_VILA;
+  portais.push({ portal: criarPortal(vilarejo.scene, x, z, Math.atan2(-x, -z)), mapa: vilarejo, destino: mostrarCastelo });
+  mostrarAviso('Um portal se abriu no fundo da vila!');
+  mostrarDica('O portal verde perto do moinho leva ao castelo dos duendes.');
+}
+
+$('talk-btn').addEventListener('click', conversarComChefe);
 
 // ------------------------------------------------------------------ Painel de atributos e itens
 const ICONE_PERSONAGEM = `<svg viewBox="0 0 64 64" aria-hidden="true">
@@ -1713,10 +1974,12 @@ function loop() {
   } else if (estado === 'criacao') {
     atualizarPrevia(dt, tempo);
     estudio.atualizar(dt, tempo);
-  } else if (estado === 'vilarejo') {
+  } else if (estado === 'aventura' || (estado === 'portal' && heroi)) {
     atualizarHeroi(dt, tempo);
-    povo.atualizar(dt, tempo);
-    vilarejo.atualizar(dt, tempo, heroi.pos, camera);
+    inimigos.atualizar(dt, tempo);
+    mapa.atualizar(dt, tempo, heroi.pos, camera);
+    atualizarPortais(dt);
+    atualizarConversa(dt);
   } else if (jogador) {
     atualizarJogador(dt, tempo);
     atualizarDuendes(dt, tempo);
