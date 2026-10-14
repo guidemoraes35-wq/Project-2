@@ -25,6 +25,7 @@
         <div id="hp-fill" class="preenchimento"></div>
         <span id="hp-text"></span>
       </div>
+      <div class="barra-xp"><div id="xp-fill"></div><span id="xp-text"></span></div>
       <div id="hud-stats" class="hud-stats"></div>
     </div>
     <div class="hud-duendes">
@@ -36,6 +37,37 @@
     <div id="boss-bar" class="chefao hidden">
       <span id="boss-name" class="chefao-nome"></span>
       <div class="chefao-barra"><div id="boss-fill"></div></div>
+    </div>
+    <button id="stats-btn" class="botao-atributos" aria-label="Atributos do personagem"></button>
+    <button id="bag-btn" class="botao-mochila" aria-label="Mochila"></button>
+    <div id="bag-panel" class="painel-mochila hidden" role="dialog" aria-label="Mochila">
+      <div class="painel-topo"><h2>Mochila</h2><button id="bag-close" aria-label="Fechar">✕</button></div>
+      <div id="bag-doll" class="boneco">
+        <div class="boneco-coluna">
+          <button class="espaco-corpo" data-espaco="cabeca"></button>
+          <button class="espaco-corpo" data-espaco="dorso"></button>
+          <button class="espaco-corpo" data-espaco="calcas"></button>
+          <button class="espaco-corpo" data-espaco="pes"></button>
+        </div>
+        <canvas id="bag-preview" class="boneco-retrato"></canvas>
+        <div class="boneco-coluna">
+          <button class="espaco-corpo" data-espaco="colar"></button>
+          <button class="espaco-corpo" data-espaco="maoD"></button>
+          <button class="espaco-corpo" data-espaco="maoE"></button>
+        </div>
+      </div>
+      <p id="bag-hint" class="mochila-dica"></p>
+      <div id="bag-items" class="itens-mochila"></div>
+    </div>
+    <div id="stats-panel" class="painel-atributos hidden" role="dialog" aria-label="Atributos do personagem">
+      <div class="painel-topo"><h2>Personagem</h2><button id="stats-close" aria-label="Fechar">✕</button></div>
+      <div id="stats-body"></div>
+    </div>
+    <button id="talk-btn" class="botao-conversar hidden">Falar com o Rei Gnomo</button>
+    <div id="dialog" class="dialogo hidden" role="dialog" aria-label="Conversa">
+      <div id="dialog-name" class="dialogo-nome"></div>
+      <p id="dialog-text"></p>
+      <div id="dialog-buttons" class="dialogo-botoes"></div>
     </div>
     <div id="banner" class="aviso hidden"></div>
     <div id="hint" class="dica hidden">Siga a trilha até o fim. Arraste a tela para girar a câmera.</div>
@@ -60,7 +92,10 @@
   <!-- Tela inicial -->
   <div id="intro-screen" class="tela-intro">
     <p class="intro-titulo">Floresta Sombria</p>
-    <button id="intro-btn" class="botao-intro">Iniciar Tutorial</button>
+    <div class="intro-botoes">
+      <button id="intro-btn" class="botao-intro">Iniciar Tutorial</button>
+      <button id="skip-btn" class="botao-pular">Pular tutorial</button>
+    </div>
   </div>
 
   <!-- Seleção de avatar -->
@@ -84,6 +119,33 @@
       <button id="change-btn" class="botao-secundario">Trocar avatar</button>
     </div>
   </div>
+
+  <!-- Criação do personagem (depois do portal) -->
+  <div id="create-screen" class="tela-criacao hidden">
+    <div class="criacao-painel">
+      <div class="criacao-topo">
+        <h1>Crie seu personagem</h1>
+        <ol id="create-steps" class="etapas"></ol>
+      </div>
+      <div id="create-body" class="criacao-corpo"></div>
+      <div class="criacao-botoes">
+        <button id="create-back" class="botao-secundario">Voltar</button>
+        <button id="create-next" class="botao-principal">Próximo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Subiu de nível: o jogo pausa até o jogador escolher -->
+  <div id="levelup" class="tela-nivel hidden" role="dialog" aria-label="Subiu de nível">
+    <div class="nivel-caixa">
+      <p class="nivel-topo">Você subiu de nível</p>
+      <h2 id="levelup-title"></h2>
+      <p class="nivel-pergunta">Escolha uma melhoria:</p>
+      <div id="levelup-options" class="melhorias"></div>
+    </div>
+  </div>
+
+  <div id="fade"></div>
 
   <noscript>Este jogo precisa de JavaScript.</noscript>
   <script type="module" src="src/main.js"></script>

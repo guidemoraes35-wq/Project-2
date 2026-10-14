@@ -5,11 +5,156 @@ O jogador escolhe um avatar — **Assassino** ou **Maga** — e entra numa dunge
 uma trilha sinuosa por uma floresta escura, iluminada apenas pela lua e por lamparinas,
 e cercada por um rio que não pode ser atravessado. Quanto mais se avança pela trilha,
 mais duendes aparecem. No fim dela, numa clareira com pedras antigas, espera o
-**Chefão Duende**: derrotá-lo vence o jogo.
+**Chefão Duende**. Tudo isso é o tutorial.
+
+## Depois do tutorial
+
+1. **Portal:** quando o Chefão Duende morre, um portal verde se abre onde ele caiu.
+   Atravessar o portal leva à criação do personagem.
+2. **Criação do personagem definitivo**, em três etapas (com prévia 3D num pedestal; arraste para girar):
+   - **Aparência:** menino ou menina, e uma das 6 combinações de cor de pele, cabelo e olhos
+     (só as cores aparecem na tela).
+   - **Roupa:** vermelha com detalhes marrons, azul com detalhes brancos ou verde com detalhes pretos.
+   - **Presente:** espada, vara ou escudo, cada um com um bônus nos atributos.
+3. **Vilarejo:** o personagem aparece num vilarejo de dia — praça com poço, casas, feira, horta,
+   moinho e floresta em volta. O joystick e o botão de ataque continuam na tela. O botão com o
+   ícone do personagem (canto superior direito) mostra os atributos (só os números) e os itens,
+   cada um com o botão **Equipar** / **Remover**. O herói segura até **dois itens** ao mesmo tempo.
+   Se cair, levanta de novo na entrada do vilarejo.
+
+### Gnomos
+
+Sempre há de 10 a 15 gnomos passeando pelo vilarejo: pequenos, chapéu de cone vermelho, roupa
+azul ou verde e barba branca cheia. São pacíficos, mas quem bate num gnomo deixa ele (e os gnomos
+a até 8 m) bravos: ficam mais rápidos e revidam com uma **espadinha** (Poder) ou com a **magia de
+terra** (Inteligência), que marca um círculo no chão e faz espinhos de pedra saírem da terra.
+Ficam calmos de novo depois de 20 s sem apanhar. Um gnomo derrotado é substituído por outro após 12 s.
+
+| | Vida | Poder | Velocidade | Defesa | Inteligência |
+| --- | --- | --- | --- | --- | --- |
+| Gnomo | 120 | 30 | 20 (feliz) / 45 (bravo) | 30 | 80 |
+
+O **Rei Gnomo** fica parado na praça, ao lado do poço, com coroa em vez de chapéu pontudo.
+Chegando perto dele aparece o botão **Falar com o Rei Gnomo**. Ele também pode ser atacado
+(vida 300, poder 40, defesa 40, inteligência 120): revida com uma magia de terra enorme e, se for
+derrotado, volta à praça depois de 40 s.
+
+### Conversas
+
+Em qualquer conversa, o joystick e o botão de ataque somem, o herói fica parado olhando para quem
+fala e a câmera se aproxima dos dois. As falas ficam em `src/conversas.js`.
+
+Na conversa do Rei Gnomo ele desconfia, se espanta ("UM HUMANO???"), tenta lembrar, pensa e
+pergunta se o herói topa ajudar a vila:
+- **Não:** o chefe cai na risada e acaba com o herói na hora (ele volta na entrada da vila).
+- **Sim:** o chefe conta da peste dos duendes, promete um presente "apropriado" e um **portal
+  verde** se abre no fundo da vila, perto do moinho, levando ao castelo dos duendes.
+
+O jogo não mostra dicas de para onde ir: o jogador descobre o mundo sozinho.
+
+## Castelo dos Duendes
+
+A entrada é um pátio murado ao entardecer (torres, fogueira, tendas e barricadas). Uma passagem
+aberta pela fortaleza, da largura de um corredor, leva direto a um **labirinto de corredores** com vários caminhos possíveis e, no fim
+dele, à **sala do tesouro**, cheia de ouro e joias, onde está a **Princesa Duendete**. Os duendes
+ficam parados até o herói chegar perto (9 m) e estão espalhados: 6 duendes fracos no pátio e o
+resto pelo labirinto, com arqueiros e mágicos do meio para o fim do caminho. No labirinto a câmera
+sobe aos poucos ao atravessar a passagem, olhando por cima das paredes, e desce um pouco ao entrar
+na sala do tesouro, cuja entrada tem colunas douradas e tochas. Se o herói cair, volta no portão do castelo.
+
+| | Vida | Poder | Velocidade | Defesa | Inteligência | Quantidade |
+| --- | --- | --- | --- | --- | --- | --- |
+| Duende fraco (clava) | 20 | 5 | 20 | 5 | 0 | 30 |
+| Duende arqueiro (flechas) | 20 | 8 | 15 | 0 | 0 | 8 |
+| Duende mágico (veneno) | 5 | 5 | 30 | 5 | 20 | 6 |
+| Princesa Duendete | 80 | 10 | 30 | 15 | 30 | 1 |
+
+A **Princesa Duendete** foge do herói pela sala e, a cada 5 s, chama 5 duendes fracos para atacá-lo
+(no máximo 5 vivos de cada vez). Quando a vida dela acaba, ela ainda fala com o herói — "Os Gnomos
+saaa-….." e, já fraca, de joelhos, "Mentirosooossss" — e só então morre. Aparece um **portal
+azul-claro** que volta à vila dos gnomos.
+
+No meio do labirinto há um **baú**. O que tem dentro depende do presente escolhido:
+
+| Presente | No baú |
+| --- | --- |
+| Escudo | Escudo Duendeiro e Espada Duendeira |
+| Espada | Escudo e Espada Duendeira |
+| Vara | Escudo e Feitiço dos Duendes |
+
+Ao voltar à vila pelo portal azul, o Rei Gnomo entrega o **Gorro dos Gnomos**.
+
+### Itens
+
+| Item | Lugar | Efeito |
+| --- | --- | --- |
+| Espada | mão | +15 Poder |
+| Vara | mão | +10 Inteligência, +5 Vida |
+| Escudo | mão esquerda | +15 Defesa, −3 Velocidade |
+| Escudo Duendeiro | mão esquerda | +20 Defesa, −5 Velocidade |
+| Espada Duendeira | mão | +15 de dano em cada golpe nos duendes, +10 nos outros seres |
+| Feitiço dos Duendes | mão | junto com a vara, troca o jato de água pelo veneno dos duendes mágicos |
+| Gorro dos Gnomos | cabeça | +5 Vida, +5 Inteligência |
+
+### Mochila
+
+O botão com a mochila (abaixo do botão do personagem) mostra um retrato do herói com os lugares em
+volta: cabeça, colar, dorso, calças, pés, mão direita e mão esquerda (um item em cada). Tocar num item
+equipa; tocar num lugar ocupado guarda o item; tocar num lugar vazio mostra só os itens que cabem nele.
+
+### Ataques do herói
+
+- **Espada:** golpe de perto (Poder).
+- **Vara:** jato de água que voa até o inimigo (Inteligência). Com o Feitiço dos Duendes, vira um
+  veneno que não machuca no contato e tira vida por 3 s (no total, 1,5 vez o dano da água).
+- **Escudo ou nada na mão:** socos (Poder).
+
+O **veneno** do duende mágico não causa dano no contato: tira 1 de vida por segundo durante 3 s
+(a barra de vida fica verde enquanto isso).
+
+### Experiência e níveis
+
+Inimigos derrotados deixam cair **XP**: moléculas vermelhas brilhantes que voam até o herói quando ele
+chega perto. Não existe XP no tutorial.
+
+| | XP |
+| --- | --- |
+| Duende fraco | 1 |
+| Duende arqueiro | 1 |
+| Duende mágico | 2 |
+| Princesa Duendete | 10 |
+| Gnomo | 30 |
+| Rei Gnomo | 50 |
+ O herói começa no **nível 1** e sobe de
+nível ao juntar **15 + 5N** de XP (N = nível atual), até o **nível 10**. A cada nível o jogo pausa
+e o jogador escolhe uma melhoria:
+
+| | Melhoria |
+| --- | --- |
+| A | Vida +5 |
+| B | Ataque (Poder) +2 |
+| C | Velocidade +2 |
+| D | Defesa +3 |
+| E | Inteligência +2 |
+
+No computador também dá para escolher com as teclas A a E. O nível e o XP aparecem embaixo da
+barra de vida e no painel do personagem.
+
+### Atributos do personagem definitivo
+
+| | Vida | Poder | Velocidade | Defesa | Inteligência |
+| --- | --- | --- | --- | --- | --- |
+| Base | 10 | 8 | 25 | 5 | 5 |
+| Espada | | +15 | | | |
+| Vara | +5 | | | | +10 |
+| Escudo | | | −3 | +15 | |
+
+A velocidade final define a velocidade de movimento no vilarejo (`velocidade × 0,2` metros por segundo).
 
 ## Como jogar
 
-O jogo abre numa tela escura com o botão **Iniciar Tutorial**; ao tocar nele, vem a escolha do avatar.
+O jogo abre numa tela escura com o botão **Iniciar Tutorial** (vai para a escolha do avatar) e, embaixo,
+**Pular tutorial**, que leva direto à criação do personagem.
 
 | Ação | Celular | Computador |
 | --- | --- | --- |
@@ -96,9 +241,17 @@ Todos os valores ficam em `src/config.js`.
 ```
 index.html        HUD, controles e telas
 css/style.css     estilos (responsivo: celular em pé/deitado e computador)
-src/config.js     atributos, regras e fórmula de dano
-src/main.js       loop do jogo, jogador, duendes, combate, câmera, telas
+src/config.js     atributos, regras, fórmula de dano e opções da criação do personagem
+src/main.js       loop do jogo, jogador, duendes, combate, câmera, telas, portal, criação e vilarejo
 src/world.js      trilha, rio, floresta, lamparinas, clareira final, lua, colisões
+src/portal.js     portal verde que se abre quando o chefão morre
+src/estudio.js    cenário da criação do personagem (pedestal mágico)
+src/vilarejo.js   vilarejo: casas, praça, poço, feira, horta, moinho e colisões
+src/gnomos.js     gnomos do vilarejo: passeio, raiva, espada, magia de terra e o Rei Gnomo (expressões)
+src/conversas.js  falas das conversas
+src/castelo.js    castelo dos duendes: muralhas, torres, fortaleza, pátio e colisões
+src/duendesCastelo.js  duendes do castelo: fracos, arqueiros e mágicos (veneno)
+src/xp.js         orbes de XP que os duendes deixam cair
 src/natureza.js   pinheiros, carvalhos, pedras, arbustos, grama ao vento, lamparinas e braseiros
 src/models.js     modelos cartoon (sombreado toon + contorno, joelhos e cotovelos articulados) e animações
 src/effects.js    partículas, rastro de golpe e números de dano

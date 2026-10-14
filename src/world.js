@@ -7,7 +7,7 @@ import {
   geoTroncoCaido, geoTufoGrama, materialGrama, criarLamparina, criarBraseiro, geoMenir,
 } from './natureza.js';
 
-function criarAleatorio(semente) {
+export function criarAleatorio(semente) {
   let s = semente % 2147483647;
   return () => {
     s = (s * 16807) % 2147483647;

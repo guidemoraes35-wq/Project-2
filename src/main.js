@@ -1,15 +1,28 @@
 import * as THREE from 'three';
-import { CLASSES, DUENDE, ARQUEIRO, CHEFAO, ATRIBUTOS, REGRAS, NOMES_ATRIBUTO, calcularDano, pontosDeAtaque, vidaPorSegundo } from './config.js';
+import {
+  CLASSES, DUENDE, ARQUEIRO, CHEFAO, ATRIBUTOS, REGRAS, NOMES_ATRIBUTO, calcularDano, pontosDeAtaque, vidaPorSegundo,
+  GENEROS, APARENCIAS, ROUPAS, ROUPA_SIMPLES, PRESENTES, atributosHeroi, textoBonus, HEROI_BASE, ESPACOS, GNOMO_CHEFE,
+} from './config.js';
 import { Input } from './input.js';
 import { criarMundo, texturaBrilho } from './world.js';
-import { criarAssassino, criarMaga, criarDuende, criarChefao, animarRig, criarContornoTranslucido } from './models.js';
+import { criarAssassino, criarMaga, criarDuende, criarChefao, criarHeroi, descartarRig, animarRig, criarContornoTranslucido } from './models.js';
 import { Particulas, RastroGolpe, NumerosDano } from './effects.js';
+import { criarPortal } from './portal.js';
+import { criarEstudio } from './estudio.js';
+import { criarVilarejo } from './vilarejo.js';
+import { criarPovoGnomo } from './gnomos.js';
+import { criarCastelo } from './castelo.js';
+import { criarDuendesCastelo } from './duendesCastelo.js';
+import { criarOrbes } from './xp.js';
+import { XP, xpParaSubir, MELHORIAS, DUENDE_FRACO, ARQUEIRO_CASTELO, DUENDE_MAGICO, PRINCESA, ITENS, item, ATAQUES_HEROI } from './config.js';
+import { CONVERSA_CHEFE, CONVERSA_CHEFE_SIM, CONVERSA_CHEFE_NAO, CONVERSA_CHEFE_LEMBRETE, CONVERSA_CHEFE_VITORIA, CONVERSA_PRINCESA_MORTE, CONVERSA_CHEFE_PRESENTE } from './conversas.js';
 
 // ------------------------------------------------------------------ Elementos
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
 const telaSelecao = $('select-screen');
 const telaFim = $('end-screen');
+const telaCriacao = $('create-screen');
 const hud = $('hud');
 const controles = $('controls');
 
@@ -21,10 +34,19 @@ renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
 
-const scene = new THREE.Scene();
+const scene = new THREE.Scene(); // a floresta do tutorial
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 420);
 const mundo = criarMundo(scene);
 const particulas = new Particulas(scene);
+const estudio = criarEstudio(); // cenário da criação do personagem
+let vilarejo = null;            // criado na primeira visita
+let cena = scene;               // cena desenhada agora
+
+/** Troca a cena desenhada; as partículas vão junto. */
+function trocarCena(nova) {
+  cena = nova;
+  nova.add(particulas.pontos);
+}
 // luz fraca que acompanha o jogador para que o avatar seja visível no escuro
 const luzJogador = new THREE.PointLight(0x8fa6ff, 5, 9, 1.4);
 scene.add(luzJogador);
@@ -48,7 +70,7 @@ window.addEventListener('resize', redimensionar);
 redimensionar();
 
 // ------------------------------------------------------------------ Estado
-let estado = 'selecao'; // selecao | jogando | fim
+let estado = 'selecao'; // selecao | jogando | fim | portal | criacao | vilarejo
 let classeSelecionada = 'assassino';
 let jogador = null;
 let duendes = [];
@@ -63,6 +85,10 @@ let progresso = 0;     // quantos metros da trilha o jogador já percorreu
 let timerFim = -1;
 let chefao = null;
 let tremor = 0;
+let portal = null;
+let timerPortal = -1;
+let localPortal = null;
+let heroi = null; // personagem definitivo, no vilarejo
 const cam = { yaw: Math.PI * 0.25, pitch: 0.42, dist: 6.5 };
 
 const tmp = new THREE.Vector3();
@@ -154,8 +180,15 @@ function selecionarClasse(id) {
 function mostrarSelecao() {
   estado = 'selecao';
   limparPartida();
+  removerHeroi();
+  removerPrevia();
+  trocarCena(scene);
+  camera.clearViewOffset();
   montarPreview();
   telaFim.classList.add('hidden');
+  telaCriacao.classList.add('hidden');
+  hud.classList.remove('modo-vilarejo');
+  controles.classList.remove('sem-super');
   hud.classList.add('hidden');
   controles.classList.add('hidden');
   telaSelecao.classList.remove('hidden');
@@ -177,6 +210,9 @@ function limparPartida() {
   bolasDeFogo = [];
   pedras = [];
   if (rastro) rastro.remover(scene);
+  if (portal) portal.remover();
+  portal = null;
+  timerPortal = -1;
   jogador = null;
   chefao = null;
   duendes = [];
@@ -240,6 +276,7 @@ function iniciarJogo(id) {
   hud.classList.remove('hidden');
   controles.classList.remove('hidden');
   const dica = $('hint');
+  dica.textContent = 'Siga a trilha até o fim. Arraste a tela para girar a câmera.';
   dica.classList.remove('hidden', 'some');
   setTimeout(() => dica.classList.add('some'), 4500);
   estado = 'jogando';
@@ -256,15 +293,16 @@ function atualizarHUD() {
   if (chefao) $('boss-fill').style.width = `${Math.max(0, chefao.hp / chefao.hpMax) * 100}%`;
 }
 
-function terminar(vitoria) {
+/** O jogador morreu no tutorial (vencer o chefão abre o portal em vez desta tela). */
+function terminar() {
   estado = 'fim';
   controles.classList.add('hidden');
   input.reiniciar();
-  $('end-title').textContent = vitoria ? 'Vitória!' : 'Você morreu';
-  $('end-title').className = vitoria ? 'vitoria' : 'derrota';
+  $('end-title').textContent = 'Você morreu';
+  $('end-title').className = 'derrota';
   const pct = Math.round(Math.min(1, progresso / mundo.comprimento) * 100);
-  $('end-text').textContent = vitoria
-    ? `O ${CHEFAO.nome} foi derrotado e a floresta está livre! Duendes derrotados pelo caminho: ${mortos}.`
+  $('end-text').textContent = chefao && chefao.morto
+    ? `O ${CHEFAO.nome} foi derrotado, mas você caiu antes de atravessar o portal. Duendes derrotados: ${mortos}.`
     : chefao
       ? `Você chegou ao fim da trilha, mas caiu diante do ${CHEFAO.nome}. Duendes derrotados: ${mortos}.`
       : `Você percorreu ${pct}% da trilha e derrotou ${mortos} duendes antes de cair.`;
@@ -432,7 +470,9 @@ function danoDuende(d, dano, origem, op = {}) {
     if (d === chefao) {
       particulas.emitir(tmp, 0x8cff6a, 90, { vel: 6, vida: 1.6, subir: 2 });
       tremor = 0.5;
-      timerFim = 2.4;
+      // um portal verde se abre onde o chefão caiu
+      timerPortal = 2.0;
+      localPortal = { x: d.pos.x, z: d.pos.z };
       atualizarHUD();
       return;
     }
@@ -904,16 +944,36 @@ function regenerar(ent, dt) {
     ent.regenT -= 1;
     const ganho = Math.min(vidaPorSegundo(ent.hpMax), ent.hpMax - ent.hp);
     ent.hp += ganho;
-    if (ent === jogador) {
-      tmp.copy(jogador.pos).setY(2.0);
+    if (ent === jogador || ent === heroi) {
+      tmp.copy(ent.pos).setY(2.0);
       numeros.mostrar(tmp, `+${ganho}`, 'cura');
       particulas.emitir(tmp.setY(1.0), 0x6aff8a, 6, { vel: 1, vida: 0.7, subir: 1.2 });
     }
     if (ent === jogador || ent === chefao) atualizarHUD();
+    if (ent === heroi) atualizarHUDHeroi();
   }
 }
 
 // ------------------------------------------------------------------ Jogador
+/** Move com o joystick/teclado relativo à câmera. Retorna a intensidade do movimento (0 a 1). */
+function moverPelaCamera(ent, vel, dt, girar = true) {
+  const m = input.movimento();
+  const mag = Math.min(1, Math.hypot(m.x, m.y));
+  const sy = Math.sin(cam.yaw), cy = Math.cos(cam.yaw);
+  const mx = cy * m.x - sy * m.y;
+  const mz = -sy * m.x - cy * m.y;
+  // acelera e freia em vez de começar e parar de uma vez
+  ent.vx ??= 0;
+  ent.vz ??= 0;
+  const k = 1 - Math.exp(-dt * (mag > 0.01 ? 9 : 13));
+  ent.vx += (mx * vel - ent.vx) * k;
+  ent.vz += (mz * vel - ent.vz) * k;
+  ent.pos.x += ent.vx * dt;
+  ent.pos.z += ent.vz * dt;
+  if (girar && mag > 0.01) ent.dir = girarPara(ent.dir, Math.atan2(mx, mz), dt * 11);
+  return vel > 0 ? Math.min(1, Math.hypot(ent.vx, ent.vz) / vel) : 0;
+}
+
 function duendeMaisProximo(maxDist, cone = Math.PI) {
   let melhor = null, melhorD = maxDist;
   for (const d of duendes) {
@@ -1049,21 +1109,10 @@ function atualizarJogador(dt, t) {
     return;
   }
 
-  // movimento relativo à câmera
-  const m = estado === 'jogando' ? input.movimento() : { x: 0, y: 0 };
-  const mag = Math.hypot(m.x, m.y);
-  const sy = Math.sin(cam.yaw), cy = Math.cos(cam.yaw);
-  const mx = cy * m.x - sy * m.y;
-  const mz = -sy * m.x - cy * m.y;
   const atacando = j.ataqueT >= 0;
-  if (mag > 0.01) {
-    const vel = j.velocidade * (atacando ? 0.5 : 1);
-    j.pos.x += mx * vel * dt;
-    j.pos.z += mz * vel * dt;
-    if (!atacando) j.dir = girarPara(j.dir, Math.atan2(mx, mz), dt * 14);
-  }
+  const mag = estado === 'jogando' ? moverPelaCamera(j, j.velocidade * (atacando ? 0.5 : 1), dt, !atacando) : 0;
   mundo.resolverColisao(j.pos, j.raio);
-  j.andar += (Math.min(1, mag) - j.andar) * Math.min(1, dt * 10);
+  j.andar += (mag - j.andar) * Math.min(1, dt * 10);
 
   // ataque
   if (estado === 'jogando' && input.atacando() && j.recarga <= 0 && !atacando) iniciarAtaque();
@@ -1105,17 +1154,50 @@ function atualizarCamera(dt, t) {
     camera.lookAt(alvoCam);
     return;
   }
+  if (estado === 'criacao') {
+    cameraCriacao(dt);
+    return;
+  }
 
   const olhar = input.consumirOlhar(dt);
   cam.yaw -= olhar.dx * 0.006;
   cam.pitch = THREE.MathUtils.clamp(cam.pitch + olhar.dy * 0.004, 0.08, 1.2);
 
-  alvoCam.set(jogador.pos.x, 1.3, jogador.pos.z);
+  let foco = heroi && (estado === 'aventura' || estado === 'portal') ? heroi.pos : jogador.pos;
+  // na conversa, a câmera chega mais perto e gira de lado para mostrar os dois rostos
+  const k = Math.min(1, dt * 2.5);
+  cam.zoom = (cam.zoom ?? 1) + ((conversa?.com ? 0.62 : 1) - (cam.zoom ?? 1)) * k;
+  if (conversa?.com) {
+    const c = conversa.com;
+    const alvoYaw = Math.atan2(heroi.pos.x - c.x, heroi.pos.z - c.z) + 1.15;
+    cam.yaw += difAngulo(cam.yaw, alvoYaw) * k;
+    cam.pitch += (0.16 - cam.pitch) * k;
+    foco = tmp2.set((heroi.pos.x + c.x) / 2, 0, (heroi.pos.z + c.z) / 2);
+  }
+  alvoCam.set(foco.x, 1.3 - (1 - (cam.zoom ?? 1)) * 0.6, foco.z);
+  let dist = cam.dist * (cam.zoom ?? 1);
+  // nos corredores do labirinto a câmera fica mais alta, olhando por cima das paredes
+  const alvoPitch = heroi && mapa === castelo ? castelo.pitchMinimo(heroi.pos.z) : 0.08;
+  cam.minPitch = (cam.minPitch ?? 0.08) + (alvoPitch - (cam.minPitch ?? 0.08)) * Math.min(1, dt * 3);
+  if (cam.pitch < cam.minPitch) cam.pitch = cam.minPitch;
+  // dentro do castelo (passagem, labirinto e sala) a câmera também desce suave quando dá
+  if (heroi && mapa === castelo && heroi.pos.z < -44 && cam.pitch > cam.minPitch) cam.pitch += (cam.minPitch - cam.pitch) * Math.min(1, dt * 1.5);
+  // se uma parede ficar entre a câmera e o herói, a câmera chega mais perto
+  if (heroi && mapa?.colide && (estado === 'aventura' || estado === 'portal')) {
+    const sp = Math.sin(cam.yaw) * Math.cos(cam.pitch), cpz = Math.cos(cam.yaw) * Math.cos(cam.pitch);
+    for (let d = 0.8; d < dist; d += 0.35) {
+      const y = alvoCam.y + Math.sin(cam.pitch) * d;
+      if (y < 4 && mapa.colide(alvoCam.x + sp * d, alvoCam.z + cpz * d, 0.2)) {
+        dist = Math.max(1.2, d - 0.4);
+        break;
+      }
+    }
+  }
   const cp = Math.cos(cam.pitch);
   camera.position.set(
-    alvoCam.x + Math.sin(cam.yaw) * cp * cam.dist,
-    alvoCam.y + Math.sin(cam.pitch) * cam.dist,
-    alvoCam.z + Math.cos(cam.yaw) * cp * cam.dist
+    alvoCam.x + Math.sin(cam.yaw) * cp * dist,
+    alvoCam.y + Math.sin(cam.pitch) * dist,
+    alvoCam.z + Math.cos(cam.yaw) * cp * dist
   );
   if (tremor > 0) {
     tremor = Math.max(0, tremor - dt);
@@ -1125,6 +1207,1168 @@ function atualizarCamera(dt, t) {
   }
   camera.lookAt(alvoCam);
 }
+
+// ------------------------------------------------------------------ Portal
+function abrirPortal() {
+  const { x, z } = localPortal;
+  // de frente para o jogador
+  portal = criarPortal(scene, x, z, Math.atan2(jogador.pos.x - x, jogador.pos.z - z));
+  tmp.set(x, 1.5, z);
+  particulas.emitir(tmp, 0x7dff6a, 90, { vel: 7, vida: 1.2, subir: 1 });
+  tremor = Math.max(tremor, 0.4);
+  mostrarAviso('Um portal se abriu! Atravesse-o.');
+}
+
+function atualizarPortal(dt) {
+  if (timerPortal > 0) {
+    timerPortal -= dt;
+    if (timerPortal <= 0) abrirPortal();
+  }
+  if (!portal) return;
+  portal.atualizar(dt, particulas);
+  if (estado === 'jogando' && jogador.vivo && portal.abertura >= 1 && distXZ(jogador.pos, portal) < 1.1) {
+    entrarNoPortal();
+  }
+  if (estado === 'portal') {
+    // o portal puxa o jogador para dentro
+    const k = Math.min(1, dt * 4);
+    jogador.pos.x += (portal.x - jogador.pos.x) * k;
+    jogador.pos.z += (portal.z - jogador.pos.z) * k;
+    jogador.rig.root.scale.multiplyScalar(Math.exp(-dt * 2.5));
+  }
+}
+
+function entrarNoPortal() {
+  estado = 'portal';
+  jogador.invul = Infinity;
+  controles.classList.add('hidden');
+  hud.classList.add('hidden');
+  input.reiniciar();
+  tmp.copy(jogador.pos).setY(1.2);
+  particulas.emitir(tmp, 0xd8ffb0, 60, { vel: 5, vida: 0.9, subir: 1 });
+  transicao(mostrarCriacao);
+}
+
+/** Escurece a tela com um clarão verde, executa `meio` e clareia de novo. */
+function transicao(meio) {
+  const fade = $('fade');
+  fade.classList.add('ativo');
+  setTimeout(() => {
+    meio();
+    setTimeout(() => fade.classList.remove('ativo'), 150);
+  }, 950);
+}
+
+// ------------------------------------------------------------------ Criação do personagem
+const ETAPAS = ['Aparência', 'Roupa', 'Presente'];
+let etapa = 0;
+let escolha = { genero: null, aparencia: null, roupa: null, item: null };
+let previa = null;
+const giro = { angulo: 0.3, vel: 0 };
+const hex = (c) => `#${c.toString(16).padStart(6, '0')}`;
+
+/** Ícones dos presentes (o escudo é pintado com a cor da roupa escolhida). */
+function iconePresente(id) {
+  if (id === 'espada') {
+    return `<svg viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M47 6 L58 6 L58 17 L27 48 L16 37 Z" fill="#e2e8f2" stroke="#5a6478" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M53 11 L24 40" stroke="#9aa6b8" stroke-width="2"/>
+      <path d="M11 33 L31 53" stroke="#d9a93e" stroke-width="6" stroke-linecap="round"/>
+      <path d="M19 45 L10 54" stroke="#6b4423" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="8" cy="56" r="4.5" fill="#d9a93e"/></svg>`;
+  }
+  if (id === 'vara') {
+    return `<svg viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M9 57 L55 7" stroke="#7a5230" stroke-width="6" stroke-linecap="round"/>
+      <path d="M26 38.5 L33.5 30.5" stroke="#5a3a20" stroke-width="9"/>
+      <path d="M50.5 12 L56 6" stroke="#c8d2e0" stroke-width="7"/>
+      <path d="M8 58 L12 54" stroke="#c8d2e0" stroke-width="7"/>
+      <circle cx="18" cy="47" r="2.8" fill="#5a3a20"/><circle cx="43" cy="20" r="2.8" fill="#5a3a20"/></svg>`;
+  }
+  if (id === 'espadaDuendeira') {
+    return `<svg viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M47 6 L58 6 L58 17 L54 18 L52 22 L48 23 L46 27 L42 28 L40 32 L36 33 L34 37 L27 48 L16 37 L27 30 L28 26 L32 24 L33 20 L37 18 L38 14 L42 12 L43 8 Z" fill="#9adf7a" stroke="#2f6a20" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M11 33 L31 53" stroke="#3a6a2a" stroke-width="6" stroke-linecap="round"/>
+      <path d="M19 45 L10 54" stroke="#2a1a10" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="8" cy="56" r="4.5" fill="#6aff4a"/></svg>`;
+  }
+  if (id === 'feiticoDuendes') {
+    return `<svg viewBox="0 0 64 64" aria-hidden="true">
+      <circle cx="32" cy="32" r="14" fill="#a8ff6a" stroke="#3ad02a" stroke-width="3"/>
+      <ellipse cx="32" cy="32" rx="25" ry="9" fill="none" stroke="#7dff4a" stroke-width="2.5" transform="rotate(-25 32 32)"/>
+      <ellipse cx="32" cy="32" rx="25" ry="9" fill="none" stroke="#7dff4a" stroke-width="2.5" transform="rotate(35 32 32)"/>
+      <circle cx="27" cy="27" r="4" fill="#ffffff" opacity="0.7"/></svg>`;
+  }
+  if (id === 'gorroGnomos') {
+    return `<svg viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M14 50 C16 34 22 20 32 12 C40 8 50 12 52 22 C46 18 40 20 38 28 C40 36 46 44 50 50 Z" fill="#d02a26" stroke="#7a1010" stroke-width="2" stroke-linejoin="round"/>
+      <rect x="10" y="48" width="44" height="8" rx="4" fill="#b81e1c" stroke="#7a1010" stroke-width="2"/>
+      <circle cx="52" cy="24" r="5" fill="#f6f4ee"/></svg>`;
+  }
+  if (id === 'escudoDuendeiro') {
+    // escudo verde com espinhos e uma pedra brilhante
+    return `<svg viewBox="0 0 64 64" aria-hidden="true">
+      <g fill="#8a9a5a">${[0, 60, 120, 180, 240, 300].map((a) => `<path d="M32 3 L36 10 L28 10 Z" transform="rotate(${a + 30} 32 32)"/>`).join('')}</g>
+      <circle cx="32" cy="32" r="23" fill="#3f8a2a"/>
+      <rect x="27.5" y="9" width="9" height="46" fill="#1f4a14"/>
+      <circle cx="32" cy="32" r="24" fill="none" stroke="#8a9a5a" stroke-width="4"/>
+      <path d="M32 24 L39 32 L32 40 L25 32 Z" fill="#9dff6a" stroke="#3ad02a" stroke-width="1.5"/></svg>`;
+  }
+  const cor = escolha.roupa ? hex(escolha.roupa.principal) : '#8a5a30';
+  const faixa = escolha.roupa ? hex(escolha.roupa.detalhe) : '#c8b48a';
+  return `<svg viewBox="0 0 64 64" aria-hidden="true">
+    <clipPath id="disco-escudo"><circle cx="32" cy="32" r="24"/></clipPath>
+    <circle cx="32" cy="32" r="24" fill="${cor}"/>
+    <rect x="27" y="6" width="10" height="52" fill="${faixa}" clip-path="url(#disco-escudo)"/>
+    <circle cx="32" cy="32" r="25" fill="none" stroke="#9aa6b8" stroke-width="4"/>
+    <circle cx="32" cy="32" r="7" fill="#c8d2e0" stroke="#5a6478" stroke-width="1.5"/></svg>`;
+}
+
+function mostrarCriacao() {
+  limparPartida();
+  removerPreview();
+  estado = 'criacao';
+  etapa = 0;
+  escolha = { genero: null, aparencia: null, roupa: null, item: null };
+  giro.angulo = 0.3;
+  giro.vel = 0;
+  trocarCena(estudio.scene);
+  hud.classList.add('hidden');
+  controles.classList.add('hidden');
+  telaFim.classList.add('hidden');
+  telaSelecao.classList.add('hidden');
+  telaCriacao.classList.remove('hidden');
+  montarEtapa();
+  atualizarModeloPrevia();
+  camera.position.set(0, 1.5, 6);
+}
+
+/** Opções obrigatórias de cada etapa. */
+function etapaCompleta() {
+  if (etapa === 0) return !!(escolha.genero && escolha.aparencia);
+  if (etapa === 1) return !!escolha.roupa;
+  return !!escolha.item;
+}
+
+function botaoOpcao(campo, valor, selecionada, conteudo) {
+  return `<button class="opcao${selecionada ? ' selecionada' : ''}" data-campo="${campo}" data-valor="${valor}" aria-pressed="${selecionada}">${conteudo}</button>`;
+}
+
+function montarEtapa() {
+  const corpo = $('create-body');
+  const rolagem = corpo.scrollTop;
+  const menina = escolha.genero === 'menina';
+  let html = '';
+  if (etapa === 0) {
+    html += '<h2 class="criacao-pergunta">Menino ou menina?</h2><div class="opcoes opcoes-2">';
+    for (const g of GENEROS) {
+      html += botaoOpcao('genero', g.id, escolha.genero === g.id, `<span class="opcao-nome">${g.nome}</span>`);
+    }
+    // só as cores de pele, cabelo e olhos; o nome fica apenas para leitores de tela
+    html += '</div><h2 class="criacao-pergunta">Aparência</h2><div class="opcoes opcoes-3 opcoes-cores">';
+    for (const a of APARENCIAS) {
+      const nome = a.nome[menina ? 1 : 0];
+      html += botaoOpcao('aparencia', a.id, escolha.aparencia === a, `
+        <span class="amostras" role="img" aria-label="${nome}">
+          <i style="background:${hex(a.pele)}"></i><i style="background:${hex(a.cabelo)}"></i><i style="background:${hex(a.olhos)}"></i>
+        </span>`);
+    }
+    html += '</div>';
+  } else if (etapa === 1) {
+    html += '<h2 class="criacao-pergunta">Escolha a roupa</h2><div class="opcoes opcoes-1">';
+    for (const r of ROUPAS) {
+      html += botaoOpcao('roupa', r.id, escolha.roupa === r, `
+        <span class="amostra-roupa" style="--a:${hex(r.principal)};--b:${hex(r.detalhe)}" aria-hidden="true"></span>
+        <span class="opcao-nome">${r.nome} <small>com ${r.detalhes}</small></span>`);
+    }
+    html += '</div>';
+  } else {
+    html += '<h2 class="criacao-pergunta">Escolha um presente</h2><div class="opcoes opcoes-3">';
+    for (const p of PRESENTES) {
+      html += botaoOpcao('item', p.id, escolha.item === p.id, `
+        <span class="icone-presente">${iconePresente(p.id)}</span>
+        <span class="opcao-nome">${p.nome}<small>${textoBonus(p.bonus)}</small></span>`);
+    }
+    html += '</div>';
+  }
+  corpo.innerHTML = html;
+  corpo.scrollTop = rolagem;
+
+  $('create-steps').innerHTML = ETAPAS.map((nome, i) =>
+    `<li class="${i === etapa ? 'atual' : i < etapa ? 'feita' : ''}"><span>${i < etapa ? '✓' : i + 1}</span>${nome}</li>`).join('');
+  $('create-back').classList.toggle('invisivel', etapa === 0);
+  const prox = $('create-next');
+  prox.textContent = etapa < ETAPAS.length - 1 ? 'Próximo' : 'Entrar no Vilarejo';
+  prox.disabled = !etapaCompleta();
+}
+
+function escolher(campo, valor) {
+  if (campo === 'genero') escolha.genero = valor;
+  else if (campo === 'aparencia') escolha.aparencia = APARENCIAS.find((a) => a.id === valor);
+  else if (campo === 'roupa') escolha.roupa = ROUPAS.find((r) => r.id === valor);
+  else if (campo === 'item') escolha.item = valor;
+  montarEtapa();
+  atualizarModeloPrevia();
+  tmp.set(0, estudio.alturaPedestal + 1.1, 0);
+  particulas.emitir(tmp, 0x9dff8a, 40, { vel: 2.5, vida: 0.8, subir: 0.6 });
+}
+
+$('create-body').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-campo]');
+  if (b) escolher(b.dataset.campo, b.dataset.valor);
+});
+$('create-back').addEventListener('click', () => {
+  if (etapa === 0) return;
+  etapa--;
+  montarEtapa();
+});
+$('create-next').addEventListener('click', () => {
+  if (!etapaCompleta()) return;
+  if (etapa < ETAPAS.length - 1) {
+    etapa++;
+    $('create-body').scrollTop = 0;
+    montarEtapa();
+  } else {
+    $('create-next').disabled = true;
+    transicao(mostrarVilarejo);
+  }
+});
+
+/** Prévia no pedestal: até a escolha, usa um menino de roupa de linho. */
+function atualizarModeloPrevia() {
+  removerPrevia();
+  previa = criarHeroi({
+    genero: escolha.genero || 'menino',
+    aparencia: escolha.aparencia || APARENCIAS[4],
+    roupa: escolha.roupa || ROUPA_SIMPLES,
+    item: escolha.item,
+  });
+  previa.root.position.y = estudio.alturaPedestal;
+  previa.root.rotation.y = giro.angulo;
+  estudio.scene.add(previa.root);
+}
+
+function removerPrevia() {
+  if (!previa) return;
+  estudio.scene.remove(previa.root);
+  descartarRig(previa);
+  previa = null;
+}
+
+function atualizarPrevia(dt, t) {
+  // arrastar gira o personagem; solto, ele volta devagar a olhar para a câmera
+  const olhar = input.consumirOlhar(dt);
+  if (olhar.dx) giro.vel = olhar.dx * 0.012 / Math.max(dt, 1 / 120);
+  giro.angulo += giro.vel * dt;
+  giro.vel *= Math.exp(-dt * 6);
+  if (Math.abs(giro.vel) < 0.2) giro.angulo += difAngulo(giro.angulo, 0.3 + Math.sin(t * 0.6) * 0.25) * Math.min(1, dt * 1.5);
+  if (!previa) return;
+  previa.root.rotation.y = giro.angulo;
+  animarRig(previa, dt, t, 0);
+}
+
+/** A câmera enquadra o pedestal na parte da tela que o painel não cobre. */
+function cameraCriacao(dt) {
+  const w = window.innerWidth, h = window.innerHeight;
+  const painel = document.querySelector('.criacao-painel').getBoundingClientRect();
+  const empe = w < h;
+  // em pé o painel fica embaixo; deitado, à direita
+  const livreX = empe ? w : Math.max(w * 0.4, painel.left);
+  const livreY = empe ? Math.max(h * 0.35, painel.top) : h;
+  camera.setViewOffset(w, h, (w - livreX) / 2, (h - livreY) / 2, w, h);
+  const fracao = livreY / h;
+  const dist = THREE.MathUtils.clamp(3.2 / (0.8 * fracao * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))), 4, 11);
+  camera.position.lerp(tmp.set(0, 1.75, dist), Math.min(1, dt * 4));
+  camera.lookAt(0, 1.2, 0);
+}
+
+// ------------------------------------------------------------------ Aventura (vilarejo e castelo)
+// Depois da criação, o herói anda por "mapas": o vilarejo e o castelo dos duendes.
+// Cada mapa tem os seus personagens (gnomos ou duendes) e os seus portais.
+let povo = null;             // gnomos do vilarejo
+let castelo = null;          // mapa do castelo dos duendes
+let duendesCastelo = null;   // inimigos do castelo
+let mapa = null;             // mapa onde o herói está
+let inimigos = null;         // personagens do mapa atual (gnomos ou duendes)
+let portais = [];            // { portal, mapa, destino }
+let missaoAceita = false;    // o herói aceitou ajudar os gnomos
+let princesaDerrotada = false; // a Princesa Duendete foi derrotada
+let bauAberto = false;       // o baú do labirinto já foi aberto
+let gorroEntregue = false;   // o Rei Gnomo já deu o Gorro dos Gnomos
+let aguas = [];              // jatos de água da vara
+let pausado = false;         // o jogo para enquanto o jogador escolhe a melhoria de nível
+let niveisPendentes = 0;     // níveis ganhos que ainda esperam uma escolha
+
+const POSICAO_PORTAL_VILA = { x: -3, z: -29 }; // no fundo da vila, perto do moinho
+
+function contexto(scene, extra) {
+  return {
+    scene,
+    particulas,
+    numeros,
+    camera,
+    heroi: () => heroi,
+    heroiVisivel: () => !!heroi && heroi.vivo && !conversa,
+    danoHeroi,
+    envenenar,
+    tremor: (v) => { tremor = Math.max(tremor, v); },
+    ...extra,
+  };
+}
+
+function prepararVilarejo() {
+  if (vilarejo) return;
+  vilarejo = criarVilarejo();
+  vilarejo.orbes = criarOrbes({ scene: vilarejo.scene, particulas, coletar: ganharXP });
+  povo = criarPovoGnomo(contexto(vilarejo.scene, {
+    vilarejo,
+    aoMorrer: (g) => soltarXP(vilarejo, g.pos, g.rei ? XP.porRei : XP.porGnomo),
+  }));
+  povo.reiniciar();
+}
+
+function prepararCastelo() {
+  if (castelo) return;
+  castelo = criarCastelo();
+  castelo.orbes = criarOrbes({ scene: castelo.scene, particulas, coletar: ganharXP });
+  duendesCastelo = criarDuendesCastelo(contexto(castelo.scene, {
+    mapa: castelo,
+    aoMorrer(d) {
+      if (d.cfg === DUENDE_FRACO) soltarXP(castelo, d.pos, XP.porDuende);
+      else if (d.cfg === ARQUEIRO_CASTELO) soltarXP(castelo, d.pos, XP.porArqueiro);
+      else if (d.cfg === DUENDE_MAGICO) soltarXP(castelo, d.pos, XP.porMagico);
+      else if (d.cfg === PRINCESA) derrotouPrincesa(d);
+    },
+    aoFerirPrincesa: (d) => mostrarBarraPrincesa(d),
+    // antes de morrer, a princesa ainda diz as últimas palavras
+    aoPrincesaCaindo: (d) => iniciarConversa(CONVERSA_PRINCESA_MORTE, {
+      nome: PRINCESA.nome,
+      com: d.pos,
+      expressar: (pose) => { d.pose = pose; },
+      aoTerminar: () => duendesCastelo.finalizarPrincesa(),
+    }),
+  }));
+  duendesCastelo.reiniciar();
+}
+
+function mostrarVilarejo() {
+  prepararVilarejo();
+  removerPrevia();
+  removerHeroi();
+  camera.clearViewOffset();
+  heroi = {
+    rig: null,
+    escolha: { ...escolha },
+    pos: null,
+    dir: vilarejo.inicio.dir,
+    andar: 0,
+    raio: 0.4,
+    recarga: 0,
+    ataqueT: -1,
+    acertou: false,
+    // o presente começa equipado; o herói pode segurar até dois itens
+    // o presente começa equipado (escudo na mão esquerda, armas na direita)
+    inventario: [escolha.item],
+    equipamento: { cabeca: null, colar: null, dorso: null, maoD: null, maoE: null, calcas: null, pes: null,
+      [escolha.item === 'escudo' ? 'maoE' : 'maoD']: escolha.item },
+    vivo: true,
+    mortoT: 0,
+    invul: 0,
+    semDano: 0,
+    regenT: 0,
+    veneno: null,
+    nivel: 1,
+    xp: 0,
+    bonusNivel: {}, // pontos ganhos ao subir de nível
+  };
+  aplicarAtributos();
+  heroi.hp = heroi.hpMax;
+  montarPainelAtributos();
+  telaCriacao.classList.add('hidden');
+  hud.classList.add('modo-vilarejo');
+  hud.classList.remove('hidden', 'com-chefao');
+  controles.classList.add('sem-super');
+  $('stats-panel').classList.add('hidden');
+  $('bag-panel').classList.add('hidden');
+  $('hud-name').textContent = 'Herói';
+  entrarNoMapa('vilarejo', vilarejo.inicio);
+  mostrarAviso('Bem-vindo ao Vilarejo!');
+}
+
+/** Solta orbes de XP no mapa (no máximo 6 orbes; o valor é dividido entre eles). */
+function soltarXP(m, pos, total) {
+  const n = Math.min(total, 6);
+  for (let i = 0; i < n; i++) {
+    const valor = Math.floor(total / n) + (i < total % n ? 1 : 0);
+    m.orbes.soltar(pos.x + (Math.random() - 0.5) * 0.6, pos.z + (Math.random() - 0.5) * 0.6, valor);
+  }
+}
+
+// ------------------------------------------------------------------ Princesa Duendete
+function mostrarBarraPrincesa(d) {
+  $('boss-name').textContent = PRINCESA.nome;
+  $('boss-fill').style.width = `${Math.max(0, d.hp / d.hpMax) * 100}%`;
+  $('boss-bar').classList.remove('hidden');
+  hud.classList.add('com-chefao', 'com-princesa');
+}
+
+function derrotouPrincesa(d) {
+  princesaDerrotada = true;
+  soltarXP(castelo, d.pos, XP.porPrincesa);
+  $('boss-fill').style.width = '0%';
+  setTimeout(() => {
+    $('boss-bar').classList.add('hidden');
+    hud.classList.remove('com-chefao', 'com-princesa');
+  }, 1500);
+  // um portal azul-claro aparece e leva de volta à vila dos gnomos
+  const { x, z } = castelo.centroSala;
+  portais.push({ portal: criarPortal(castelo.scene, x, z, 0, { cor: 'azul' }), mapa: castelo, destino: voltarComVitoria });
+  tremor = Math.max(tremor, 0.4);
+}
+
+/** Coloca o herói num mapa ('vilarejo' ou 'castelo') no ponto indicado. */
+function entrarNoMapa(nome, { x, z, dir }) {
+  if (nome === 'castelo') prepararCastelo();
+  mapa = nome === 'castelo' ? castelo : vilarejo;
+  inimigos = nome === 'castelo' ? duendesCastelo : povo;
+  mapa.nome = nome;
+  heroi.dir = dir;
+  heroi.vx = heroi.vz = 0;
+  montarRigHeroi(x, z);
+  trocarCena(mapa.scene);
+  estado = 'aventura';
+  cam.yaw = dir - Math.PI;
+  cam.pitch = 0.38;
+  encerrarConversa();
+  controles.classList.remove('hidden');
+  const princesaAtiva = nome === 'castelo' && !princesaDerrotada && duendesCastelo.princesa()?.alerta;
+  $('boss-bar').classList.toggle('hidden', !princesaAtiva);
+  hud.classList.toggle('com-chefao', !!princesaAtiva);
+  hud.classList.toggle('com-princesa', !!princesaAtiva);
+  for (const a of aguas) a.malha.parent?.remove(a.malha);
+  aguas = [];
+  atualizarHUDHeroi();
+  input.reiniciar();
+  tmp.set(x, 1, z);
+  particulas.emitir(tmp, 0x9dff8a, 70, { vel: 4, vida: 1, subir: 1 });
+}
+
+function mostrarCastelo() {
+  entrarNoMapa('castelo', castelo ? castelo.inicio : { x: 0, z: 1.5, dir: Math.PI });
+}
+
+function voltarAoVilarejo() {
+  entrarNoMapa('vilarejo', { x: POSICAO_PORTAL_VILA.x + 2, z: POSICAO_PORTAL_VILA.z + 3, dir: 0 });
+}
+
+/** O portal azul leva de volta à praça, na frente do Rei Gnomo, que entrega o presente. */
+function voltarComVitoria() {
+  entrarNoMapa('vilarejo', { x: GNOMO_CHEFE.x, z: GNOMO_CHEFE.z + 2.6, dir: Math.PI });
+  if (gorroEntregue) return;
+  setTimeout(() => {
+    if (estado !== 'aventura' || mapa !== vilarejo || conversa || povo.chefe.morto) return;
+    iniciarConversa(CONVERSA_CHEFE_PRESENTE, {
+      nome: GNOMO_CHEFE.nome, com: povo.chefe.pos, expressar: povo.expressar,
+      aoTerminar: () => {
+        gorroEntregue = true;
+        ganharItens(['gorroGnomos']);
+      },
+    });
+  }, 900);
+}
+
+/** Coloca itens na mochila e mostra o que foi encontrado. */
+function ganharItens(ids) {
+  for (const id of ids) if (!heroi.inventario.includes(id)) heroi.inventario.push(id);
+  montarMochila();
+  tmp.copy(heroi.pos).setY(1.4);
+  particulas.emitir(tmp, 0xffe08a, 50, { vel: 3, vida: 0.9, subir: 1.2 });
+  mostrarAviso(`Você recebeu: ${ids.map((id) => item(id).nome).join(' e ')}!`);
+  $('bag-btn').classList.add('novo');
+}
+
+function mostrarDica(texto) {
+  const dica = $('hint');
+  dica.textContent = texto;
+  dica.classList.remove('hidden', 'some');
+  clearTimeout(mostrarDica.timer);
+  mostrarDica.timer = setTimeout(() => dica.classList.add('some'), 6000);
+}
+
+/** (Re)cria o modelo do herói com os itens equipados, no lugar indicado do mapa atual. */
+function montarRigHeroi(x, z) {
+  if (heroi.rig) {
+    heroi.rig.root.parent?.remove(heroi.rig.root);
+    descartarRig(heroi.rig);
+  }
+  const rig = criarHeroi({ ...heroi.escolha, equipamento: heroi.equipamento });
+  rig.root.position.set(x, 0, z);
+  rig.root.rotation.y = heroi.dir;
+  (mapa ? mapa.scene : vilarejo.scene).add(rig.root);
+  heroi.rig = rig;
+  heroi.pos = rig.root.position;
+}
+
+/** Recalcula os atributos (base + itens equipados) e o que depende deles. */
+function aplicarAtributos() {
+  const antes = heroi.hpMax || 0;
+  heroi.atributos = atributosHeroi(Object.values(heroi.equipamento).filter(Boolean));
+  for (const [k, v] of Object.entries(heroi.bonusNivel)) heroi.atributos[k] += v;
+  heroi.hpMax = heroi.atributos.vida;
+  heroi.velocidade = heroi.atributos.velocidade * REGRAS.escalaVelocidade;
+  if (heroi.hp !== undefined) heroi.hp = Math.max(1, Math.min(heroi.hpMax, heroi.hp + Math.max(0, heroi.hpMax - antes)));
+}
+
+function removerHeroi() {
+  if (!heroi) return;
+  heroi.rig.root.parent?.remove(heroi.rig.root);
+  descartarRig(heroi.rig);
+  heroi = null;
+}
+
+function atualizarHUDHeroi() {
+  if (!heroi) return;
+  const f = Math.max(0, heroi.hp / heroi.hpMax);
+  $('hp-fill').style.width = `${f * 100}%`;
+  $('hp-fill').classList.toggle('baixa', f <= 0.3);
+  $('hp-fill').classList.toggle('envenenado', !!heroi.veneno);
+  $('hp-text').textContent = `${Math.max(0, Math.ceil(heroi.hp))} / ${heroi.hpMax}`;
+  const max = heroi.nivel >= XP.nivelMaximo;
+  const precisa = xpParaSubir(heroi.nivel);
+  $('hud-name').textContent = `Herói · Nível ${heroi.nivel}`;
+  $('xp-fill').style.width = `${max ? 100 : (heroi.xp / precisa) * 100}%`;
+  $('xp-text').textContent = max ? 'XP MÁX' : `XP ${heroi.xp} / ${precisa}`;
+}
+
+// ------------------------------------------------------------------ Experiência e níveis
+/** Recebe XP de um orbe; ao completar a barra, sobe de nível (até o 10). */
+function ganharXP(valor, pos) {
+  const h = heroi;
+  if (h.nivel >= XP.nivelMaximo) return;
+  h.xp += valor;
+  tmp.copy(pos).setY(1.8);
+  numeros.mostrar(tmp, `+${valor} XP`, 'xp');
+  while (h.nivel < XP.nivelMaximo && h.xp >= xpParaSubir(h.nivel)) {
+    h.xp -= xpParaSubir(h.nivel);
+    h.nivel++;
+    niveisPendentes++;
+  }
+  if (h.nivel >= XP.nivelMaximo) h.xp = 0;
+  atualizarHUDHeroi();
+  if (niveisPendentes > 0 && !pausado) abrirEscolhaNivel();
+}
+
+/** Pausa o jogo e mostra as cinco melhorias. */
+function abrirEscolhaNivel() {
+  pausado = true;
+  controles.classList.add('hidden');
+  $('stats-panel').classList.add('hidden');
+  $('bag-panel').classList.add('hidden');
+  input.reiniciar();
+  const nivel = heroi.nivel - niveisPendentes + 1;
+  $('levelup-title').textContent = `Nível ${nivel}!`;
+  $('levelup-options').innerHTML = MELHORIAS.map((m, i) => `
+    <button class="melhoria" data-melhoria="${i}">
+      <span class="melhoria-letra">${m.letra}</span>
+      <span class="melhoria-nome">${m.nome}</span>
+      <span class="melhoria-valor">+${m.valor}</span>
+      <span class="melhoria-atual">${heroi.atributos[m.atributo]} → ${heroi.atributos[m.atributo] + m.valor}</span>
+    </button>`).join('');
+  $('levelup').classList.remove('hidden');
+  tmp.copy(heroi.pos).setY(1);
+  particulas.emitir(tmp, 0xffd23a, 60, { vel: 4, vida: 1, subir: 2 });
+}
+
+function escolherMelhoria(i) {
+  if (!pausado) return;
+  const m = MELHORIAS[i];
+  heroi.bonusNivel[m.atributo] = (heroi.bonusNivel[m.atributo] || 0) + m.valor;
+  aplicarAtributos();
+  montarPainelAtributos();
+  atualizarHUDHeroi();
+  niveisPendentes--;
+  if (niveisPendentes > 0) {
+    abrirEscolhaNivel();
+    return;
+  }
+  $('levelup').classList.add('hidden');
+  pausado = false;
+  if (!conversa && estado === 'aventura') controles.classList.remove('hidden');
+  mostrarAviso(`${m.nome} +${m.valor}!`);
+}
+
+$('levelup-options').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-melhoria]');
+  if (b) escolherMelhoria(Number(b.dataset.melhoria));
+});
+// no computador: teclas A a E (ou 1 a 5)
+window.addEventListener('keydown', (e) => {
+  if (!pausado) return;
+  const i = ['KeyA', 'KeyB', 'KeyC', 'KeyD', 'KeyE'].indexOf(e.code);
+  const j = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].indexOf(e.code);
+  if (i >= 0 || j >= 0) escolherMelhoria(i >= 0 ? i : j);
+});
+
+
+function danoHeroi(dano, origem) {
+  const h = heroi;
+  if (!h || !h.vivo || h.invul > 0) return;
+  h.hp -= dano;
+  h.invul = REGRAS.invulnerabilidade;
+  h.semDano = 0;
+  h.regenT = 0;
+  tremor = Math.max(tremor, 0.25);
+  tmp.copy(h.pos).setY(1.9);
+  numeros.mostrar(tmp, dano, 'jogador');
+  particulas.emitir(tmp.setY(1.2), 0xff2222, 12, { vel: 3, vida: 0.5, gravidade: 8 });
+  piscarVinheta('pisca');
+  tmp.subVectors(h.pos, origem).setY(0).normalize();
+  h.pos.addScaledVector(tmp, 0.35);
+  if (h.hp <= 0) derrubarHeroi('Você foi derrotado!');
+  atualizarHUDHeroi();
+}
+
+function piscarVinheta(classe) {
+  const v = $('hurt-vignette');
+  v.classList.remove('pisca', 'veneno');
+  void v.offsetWidth;
+  v.classList.add(classe);
+}
+
+function derrubarHeroi(aviso) {
+  const h = heroi;
+  h.hp = 0;
+  h.vivo = false;
+  h.mortoT = 0;
+  h.veneno = null;
+  inimigos.acalmar();
+  mostrarAviso(aviso);
+  atualizarHUDHeroi();
+}
+
+/** Veneno: não machuca no contato; tira `dano` de vida por segundo durante `duracao` s. */
+function envenenar(dano, duracao) {
+  const h = heroi;
+  if (!h || !h.vivo) return;
+  h.veneno = { dano, restante: duracao, t: 0 };
+  tmp.copy(h.pos).setY(2.0);
+  numeros.mostrar(tmp, 'Envenenado!', 'veneno');
+  piscarVinheta('veneno');
+  atualizarHUDHeroi();
+}
+
+function atualizarVeneno(dt) {
+  const h = heroi;
+  if (!h.veneno) return;
+  h.veneno.t += dt;
+  if (Math.random() < 0.4) {
+    tmp.set(h.pos.x + (Math.random() - 0.5) * 0.5, 0.6 + Math.random() * 1.2, h.pos.z + (Math.random() - 0.5) * 0.5);
+    particulas.emitir(tmp, 0x7dff3a, 1, { vel: 0.4, vida: 0.7, subir: 1 });
+  }
+  while (h.veneno && h.veneno.t >= 1) {
+    h.veneno.t -= 1;
+    h.veneno.restante -= 1;
+    h.hp -= h.veneno.dano;
+    h.semDano = 0;
+    h.regenT = 0;
+    tmp.copy(h.pos).setY(1.9);
+    numeros.mostrar(tmp, h.veneno.dano, 'veneno');
+    if (h.hp <= 0) derrubarHeroi('O veneno te derrubou!');
+    else if (h.veneno.restante <= 0) h.veneno = null;
+    atualizarHUDHeroi();
+  }
+}
+
+/**
+ * Ataque do herói conforme o item da mão direita: a espada corta de perto, a vara lança
+ * um jato de água e, sem uma arma (só escudo ou nada), ele dá socos.
+ */
+function ataqueAtual() {
+  const eq = heroi.equipamento;
+  const arma = [eq.maoD, eq.maoE].find((id) => id && item(id).arma);
+  if (arma === 'vara') {
+    // com o Feitiço dos Duendes na outra mão, a vara lança veneno em vez de água
+    return eq.maoD === 'feiticoDuendes' || eq.maoE === 'feiticoDuendes' ? ATAQUES_HEROI.veneno : ATAQUES_HEROI.vara;
+  }
+  if (arma) return { ...ATAQUES_HEROI.espada, danoExtra: item(arma).danoExtra };
+  return ATAQUES_HEROI.soco;
+}
+
+const geoAgua = new THREE.SphereGeometry(0.2, 14, 10);
+const matAgua = new THREE.MeshStandardMaterial({ color: 0x6ac8ff, emissive: 0x1a6aaa, emissiveIntensity: 0.8, transparent: true, opacity: 0.85, roughness: 0.1 });
+const matBrilhoAgua = new THREE.SpriteMaterial({ map: texturaBrilho('rgba(90,190,255,1)'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.8 });
+const matVenenoHeroi = new THREE.MeshStandardMaterial({ color: 0xa8ff6a, emissive: 0x3ac81a, emissiveIntensity: 1.2, transparent: true, opacity: 0.85, roughness: 0.2 });
+const matBrilhoVenenoHeroi = new THREE.SpriteMaterial({ map: texturaBrilho('rgba(120,255,60,1)'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.8 });
+
+/** Jato de água da vara: segue reto (com uma leve mira) até acertar alguém. */
+function lancarAgua(atk, alvo) {
+  const veneno = atk.tipo === 'veneno';
+  const malha = new THREE.Mesh(geoAgua, veneno ? matVenenoHeroi : matAgua);
+  const brilho = new THREE.Sprite(veneno ? matBrilhoVenenoHeroi : matBrilhoAgua);
+  brilho.scale.setScalar(1.1);
+  malha.add(brilho);
+  malha.position.set(heroi.pos.x + Math.sin(heroi.dir) * 0.6, 1.25, heroi.pos.z + Math.cos(heroi.dir) * 0.6);
+  mapa.scene.add(malha);
+  const vel = new THREE.Vector3(Math.sin(heroi.dir), 0, Math.cos(heroi.dir)).multiplyScalar(atk.velocidade);
+  aguas.push({ malha, vel, alvo, vida: atk.alcance / atk.velocidade, ataque: heroi.atributos[atk.atributo], atk });
+  particulas.emitir(malha.position, veneno ? 0x8aff4a : 0x8ad8ff, 12, { vel: 2, vida: 0.4 });
+}
+
+function atualizarAguas(dt) {
+  for (let i = aguas.length - 1; i >= 0; i--) {
+    const a = aguas[i];
+    a.vida -= dt;
+    if (a.alvo && !a.alvo.morto) {
+      tmp.set(a.alvo.pos.x, 0.9, a.alvo.pos.z).sub(a.malha.position).normalize().multiplyScalar(a.vel.length());
+      a.vel.lerp(tmp, Math.min(1, dt * 6));
+    }
+    a.malha.position.addScaledVector(a.vel, dt);
+    a.malha.scale.setScalar(1 + Math.sin(a.vida * 30) * 0.12);
+    const corA = a.atk.tipo === 'veneno' ? [0x7dff3a, 0xd8ffb0] : [0x6ac8ff, 0xd8f2ff];
+    particulas.emitir(a.malha.position, corA[Math.random() < 0.5 ? 0 : 1], 2, { vel: 0.8, vida: 0.35, gravidade: 4 });
+    let fim = a.vida <= 0 || (mapa.colide && mapa.colide(a.malha.position.x, a.malha.position.z, 0.1));
+    if (!fim) {
+      for (const alvo of inimigos.alvos()) {
+        tmp2.set(alvo.pos.x, 0.9, alvo.pos.z);
+        if (tmp2.distanceTo(a.malha.position) < 0.75) {
+          if (a.atk.tipo === 'veneno') inimigos.envenenar(alvo, a.ataque, a.atk.duracaoVeneno, a.atk.multiplicador);
+          else inimigos.atingir(alvo, a.ataque, a.malha.position);
+          fim = true;
+          break;
+        }
+      }
+    }
+    if (fim) {
+      particulas.emitir(a.malha.position, a.atk.tipo === 'veneno' ? 0x8aff4a : 0x8ad8ff, 30, { vel: 4, vida: 0.6, gravidade: 8 });
+      a.malha.parent?.remove(a.malha);
+      aguas.splice(i, 1);
+    }
+  }
+}
+
+function atualizarHeroi(dt, t) {
+  const h = heroi;
+  h.invul = Math.max(0, h.invul - dt);
+  if (!h.vivo) {
+    // caído: depois de um tempo, levanta de novo na entrada do mapa
+    h.mortoT += dt;
+    h.rig.root.rotation.x = Math.max(-Math.PI / 2, h.rig.root.rotation.x - dt * 4);
+    animarRig(h.rig, dt, t, 0);
+    if (h.mortoT > 2.5) {
+      const { x, z, dir } = mapa.inicio;
+      h.pos.set(x, 0, z);
+      h.dir = dir;
+      h.vx = h.vz = 0;
+      h.rig.root.rotation.x = 0;
+      h.vivo = true;
+      h.hp = h.hpMax;
+      h.invul = 1.5;
+      cam.yaw = dir - Math.PI;
+      atualizarHUDHeroi();
+      tmp.set(x, 1, z);
+      particulas.emitir(tmp, 0x9dff8a, 50, { vel: 3, vida: 0.9, subir: 1 });
+    }
+    return;
+  }
+  const atacando = h.ataqueT >= 0;
+  // durante uma conversa o herói fica parado, olhando para quem fala
+  const mag = conversa ? moverPelaCamera(h, 0, dt, false) : moverPelaCamera(h, h.velocidade * (atacando ? 0.5 : 1), dt, !atacando);
+  if (conversa?.com) h.dir = girarPara(h.dir, Math.atan2(conversa.com.x - h.pos.x, conversa.com.z - h.pos.z), dt * 6);
+  mapa.resolverColisao(h.pos, h.raio);
+  h.andar += (mag - h.andar) * Math.min(1, dt * 10);
+
+  h.recarga -= dt;
+  const atk = ataqueAtual();
+  if (!conversa && input.atacando() && h.recarga <= 0 && !atacando) {
+    // mira automática no inimigo mais próximo (a água alcança mais longe)
+    let alvo = null, melhor = atk.tipo === 'agua' || atk.tipo === 'veneno' ? 9 : 3;
+    for (const g of inimigos.alvos()) {
+      const d = distXZ(g.pos, h.pos);
+      if (d < melhor) { melhor = d; alvo = g; }
+    }
+    if (alvo) h.dir = Math.atan2(alvo.pos.x - h.pos.x, alvo.pos.z - h.pos.z);
+    h.alvo = alvo;
+    h.ataqueT = 0;
+    h.acertou = false;
+    h.recarga = atk.recarga;
+  }
+  if (h.ataqueT >= 0) {
+    h.ataqueT += dt;
+    if (!h.acertou && h.ataqueT >= atk.acerto) {
+      h.acertou = true;
+      if (atk.tipo === 'agua' || atk.tipo === 'veneno') lancarAgua(atk, h.alvo);
+      else {
+        // Espada Duendeira: dano extra nos duendes (castelo) e um pouco menos nos outros seres
+        const extra = atk.danoExtra ? (mapa === castelo ? atk.danoExtra.duendes : atk.danoExtra.outros) : 0;
+        inimigos.atacar(h.pos, h.dir, atk.alcance, atk.arco, h.atributos[atk.atributo], extra);
+      }
+    }
+    if (h.ataqueT >= atk.duracao) h.ataqueT = -1;
+  }
+  regenerar(h, dt);
+  atualizarVeneno(dt);
+  if (!h.vivo) return;
+  h.rig.root.rotation.y = h.dir;
+  animarRig(h.rig, dt, t, h.andar, h.ataqueT >= 0 ? h.ataqueT / atk.duracao : -1);
+  h.rig.root.visible = h.invul <= 0 || Math.floor(h.invul * 20) % 2 === 0;
+  $('attack-cd').style.transform = `scaleY(${Math.max(0, h.recarga) / atk.recarga})`;
+
+  // botão de ação: conversar com o Rei Gnomo ou abrir o baú
+  let acao = null;
+  const rei = povo.chefe;
+  if (mapa === vilarejo && !rei.morto && !rei.bravo && distXZ(h.pos, rei.pos) < GNOMO_CHEFE.distanciaConversa) acao = 'conversar';
+  else if (mapa === castelo && !bauAberto && distXZ(h.pos, castelo.bau) < 2.2) acao = 'bau';
+  const botao = $('talk-btn');
+  botao.classList.toggle('hidden', !acao || !!conversa);
+  if (acao && botao.dataset.acao !== acao) {
+    botao.dataset.acao = acao;
+    botao.textContent = acao === 'bau' ? 'Abrir o baú' : `Falar com o ${GNOMO_CHEFE.nome}`;
+  }
+}
+
+/**
+ * O baú do labirinto depende do presente escolhido:
+ * escudo → Escudo Duendeiro e Espada Duendeira; espada → Escudo e Espada Duendeira;
+ * vara → Escudo e Feitiço dos Duendes.
+ */
+const CONTEUDO_BAU = {
+  escudo: ['escudoDuendeiro', 'espadaDuendeira'],
+  espada: ['escudo', 'espadaDuendeira'],
+  vara: ['escudo', 'feiticoDuendes'],
+};
+function abrirBau() {
+  bauAberto = true;
+  castelo.abrirBau();
+  tmp.set(castelo.bau.x, 1.2, castelo.bau.z);
+  particulas.emitir(tmp, 0xffe08a, 60, { vel: 3.5, vida: 1, subir: 1.5 });
+  ganharItens(CONTEUDO_BAU[heroi.escolha.item]);
+}
+
+/** Portais do mapa atual: girar, brilhar e levar o herói quando ele entra. */
+function atualizarPortais(dt) {
+  for (const p of portais) {
+    if (p.mapa !== mapa) continue;
+    p.portal.atualizar(dt, particulas);
+    if (heroi.vivo && !conversa && estado === 'aventura' && p.portal.abertura >= 1 && distXZ(heroi.pos, p.portal) < 1.1) {
+      estado = 'portal';
+      controles.classList.add('hidden');
+      input.reiniciar();
+      transicao(p.destino);
+      return;
+    }
+  }
+  // a barra da Princesa acompanha a vida dela
+  const pr = duendesCastelo?.princesa();
+  if (mapa === castelo && pr && pr.alerta && !pr.morto) mostrarBarraPrincesa(pr);
+}
+
+// ------------------------------------------------------------------ Conversas
+// Regra para qualquer conversa: os botões de movimento e ataque somem e o herói fica parado.
+let conversa = null; // { falas, i, nome, com, aoEscolher, aoTerminar, expressar, auto }
+
+function iniciarConversa(falas, { nome, com = null, expressar = null, aoEscolher = null, aoTerminar = null }) {
+  conversa = { falas, i: 0, nome, com, expressar, aoEscolher, aoTerminar, auto: -1 };
+  controles.classList.add('hidden');
+  $('talk-btn').classList.add('hidden');
+  $('stats-panel').classList.add('hidden');
+  $('bag-panel').classList.add('hidden');
+  input.reiniciar();
+  $('dialog').classList.remove('hidden');
+  mostrarFala();
+}
+
+function mostrarFala() {
+  const c = conversa;
+  const fala = c.falas[c.i];
+  $('dialog-name').textContent = c.nome;
+  $('dialog-text').textContent = fala.texto;
+  c.expressar?.(fala.expressao || null);
+  c.auto = fala.auto ?? -1;
+  const botoes = $('dialog-buttons');
+  if (fala.opcoes) {
+    botoes.innerHTML = fala.opcoes.map((o) => `<button class="botao-opcao" data-opcao="${o.id}">${o.texto}</button>`).join('');
+  } else if (fala.auto) {
+    botoes.innerHTML = '';
+  } else {
+    botoes.innerHTML = '<button class="botao-continuar" data-opcao="continuar">Continuar ▸</button>';
+  }
+  // reinicia a animação de entrada do texto
+  const p = $('dialog-text');
+  p.classList.remove('entra');
+  void p.offsetWidth;
+  p.classList.add('entra');
+}
+
+function avancarConversa(opcao = 'continuar') {
+  const c = conversa;
+  if (!c) return;
+  if (opcao !== 'continuar') {
+    // a resposta pode trocar as próximas falas
+    c.aoEscolher?.(opcao);
+    return;
+  }
+  if (c.i < c.falas.length - 1) {
+    c.i++;
+    mostrarFala();
+  } else {
+    const fim = c.aoTerminar;
+    encerrarConversa();
+    fim?.();
+  }
+}
+
+/** Continua a conversa com outras falas (depois de uma escolha). */
+function continuarConversa(falas, aoTerminar) {
+  conversa.falas = falas;
+  conversa.i = 0;
+  conversa.aoTerminar = aoTerminar;
+  mostrarFala();
+}
+
+function encerrarConversa() {
+  if (!conversa) return;
+  conversa.expressar?.(null);
+  conversa = null;
+  $('dialog').classList.add('hidden');
+  if (estado === 'aventura') controles.classList.remove('hidden');
+}
+
+function atualizarConversa(dt) {
+  if (!conversa || conversa.auto < 0) return;
+  conversa.auto -= dt;
+  if (conversa.auto <= 0) {
+    conversa.auto = -1;
+    avancarConversa();
+  }
+}
+
+$('dialog-buttons').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-opcao]');
+  if (b) avancarConversa(b.dataset.opcao);
+});
+
+// ------------------------------------------------------------------ Conversa com o Rei Gnomo
+function conversarComChefe() {
+  const base = { nome: GNOMO_CHEFE.nome, com: povo.chefe.pos, expressar: povo.expressar };
+  if (princesaDerrotada && !gorroEntregue) {
+    iniciarConversa(CONVERSA_CHEFE_PRESENTE, { ...base, aoTerminar: () => { gorroEntregue = true; ganharItens(['gorroGnomos']); } });
+  } else if (princesaDerrotada) {
+    iniciarConversa(CONVERSA_CHEFE_VITORIA, base);
+  } else if (missaoAceita) {
+    iniciarConversa(CONVERSA_CHEFE_LEMBRETE, base);
+  } else {
+    iniciarConversa(CONVERSA_CHEFE, {
+      ...base,
+      aoEscolher(resposta) {
+        if (resposta === 'sim') {
+          continuarConversa(CONVERSA_CHEFE_SIM, abrirPortalDaVila);
+        } else {
+          // o chefe ri… e acaba com o herói na hora
+          continuarConversa(CONVERSA_CHEFE_NAO, () => {
+            povo.raioMortal(heroi.pos);
+            derrubarHeroi(`O ${GNOMO_CHEFE.nome} acabou com você!`);
+          });
+        }
+      },
+    });
+  }
+}
+
+function abrirPortalDaVila() {
+  missaoAceita = true;
+  const { x, z } = POSICAO_PORTAL_VILA;
+  portais.push({ portal: criarPortal(vilarejo.scene, x, z, Math.atan2(-x, -z)), mapa: vilarejo, destino: mostrarCastelo });
+}
+
+$('talk-btn').addEventListener('click', () => {
+  if ($('talk-btn').dataset.acao === 'bau') abrirBau();
+  else conversarComChefe();
+});
+
+// ------------------------------------------------------------------ Painel de atributos e itens
+const ICONE_PERSONAGEM = `<svg viewBox="0 0 64 64" aria-hidden="true">
+  <circle cx="32" cy="21" r="11" fill="currentColor"/>
+  <path d="M12 56 C12 42 21 35 32 35 C43 35 52 42 52 56 Z" fill="currentColor"/></svg>`;
+
+const sinal = (v) => `${v > 0 ? '+' : ''}${v}`;
+
+/** Atributos do herói: só os números, com o bônus dos itens e dos níveis. */
+function montarPainelAtributos() {
+  const h = heroi;
+  const linhas = ATRIBUTOS.map((a) => {
+    const bonus = h.atributos[a.chave] - HEROI_BASE[a.chave];
+    const extra = bonus ? ` <span class="${bonus > 0 ? 'bonus-mais' : 'bonus-menos'}">(${sinal(bonus)})</span>` : '';
+    return `<div class="atributo"><span>${a.nome}</span><b>${h.atributos[a.chave]}${extra}</b></div>`;
+  }).join('');
+  const max = h.nivel >= XP.nivelMaximo;
+  $('stats-body').innerHTML = `
+    <div class="painel-nivel"><b>Nível ${h.nivel}</b><span>${max ? 'nível máximo' : `XP ${h.xp} / ${xpParaSubir(h.nivel)}`}</span></div>
+    <div class="atributos">${linhas}</div>`;
+}
+
+$('stats-btn').innerHTML = ICONE_PERSONAGEM;
+$('stats-btn').addEventListener('click', () => {
+  $('bag-panel').classList.add('hidden');
+  $('stats-panel').classList.toggle('hidden');
+});
+$('stats-close').addEventListener('click', () => $('stats-panel').classList.add('hidden'));
+
+// ------------------------------------------------------------------ Mochila
+// Os itens que o herói tem e os lugares do corpo onde podem ser equipados, em volta de um
+// retrato do herói. Tocar num item equipa; tocar num lugar ocupado guarda o item de volta.
+const ICONE_MOCHILA = `<svg viewBox="0 0 64 64" aria-hidden="true">
+  <path d="M22 16 C22 8 42 8 42 16" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+  <rect x="12" y="16" width="40" height="40" rx="10" fill="currentColor"/>
+  <rect x="20" y="34" width="24" height="14" rx="3" fill="#1a1426" opacity="0.55"/>
+  <rect x="29" y="32" width="6" height="6" rx="1.5" fill="#1a1426" opacity="0.8"/></svg>`;
+let espacoEscolhido = null; // lugar tocado para escolher o item dele
+
+/** Em qual lugar um item vai. Escudos só na mão esquerda; armas preferem a direita. */
+function lugarPara(id) {
+  const it = item(id);
+  const eq = heroi.equipamento;
+  if (it.lugar !== 'mao') return it.lugar;
+  if (it.escudo) return 'maoE';
+  if (espacoEscolhido === 'maoD' || espacoEscolhido === 'maoE') return espacoEscolhido;
+  if (id === 'feiticoDuendes') return !eq.maoE || item(eq.maoE).escudo ? 'maoE' : !eq.maoD ? 'maoD' : 'maoE';
+  if (!eq.maoD) return 'maoD';
+  if (!eq.maoE) return 'maoE';
+  return 'maoD';
+}
+
+function serveNoEspaco(id, espaco) {
+  const it = item(id);
+  if (espaco === 'maoD') return it.lugar === 'mao' && !it.escudo;
+  if (espaco === 'maoE') return it.lugar === 'mao';
+  return it.lugar === espaco;
+}
+
+function equiparItem(id) {
+  const eq = heroi.equipamento;
+  for (const k of Object.keys(eq)) if (eq[k] === id) eq[k] = null;
+  eq[lugarPara(id)] = id;
+  espacoEscolhido = null;
+  equipamentoMudou();
+}
+
+function guardarItem(espaco) {
+  heroi.equipamento[espaco] = null;
+  equipamentoMudou();
+}
+
+function equipamentoMudou() {
+  const h = heroi;
+  montarRigHeroi(h.pos.x, h.pos.z);
+  aplicarAtributos();
+  montarPainelAtributos();
+  montarMochila();
+  atualizarHUDHeroi();
+  tmp.copy(h.pos).setY(1.2);
+  particulas.emitir(tmp, 0xffe08a, 25, { vel: 2.5, vida: 0.6, subir: 0.6 });
+}
+
+const textoItem = (it) => it.descricao || Object.entries(it.bonus).map(([k, v]) => `${sinal(v)} ${ATRIBUTOS.find((a) => a.chave === k).nome}`).join(', ');
+
+function montarMochila() {
+  if (!heroi) return;
+  const eq = heroi.equipamento;
+  for (const e of ESPACOS) {
+    const el = document.querySelector(`.espaco-corpo[data-espaco="${e.id}"]`);
+    const id = eq[e.id];
+    el.classList.toggle('ocupado', !!id);
+    el.classList.toggle('escolhido', espacoEscolhido === e.id);
+    el.innerHTML = id
+      ? `<span class="icone-presente">${iconePresente(id)}</span><span class="espaco-nome">${item(id).nome}</span>`
+      : `<span class="espaco-vazio"></span><span class="espaco-nome">${e.nome}</span>`;
+    el.setAttribute('aria-label', id ? `${e.nome}: ${item(id).nome}. Toque para guardar` : `${e.nome}: vazio`);
+  }
+  const lista = heroi.inventario.map((id) => {
+    const it = item(id);
+    const equipado = Object.values(eq).includes(id);
+    const apagado = espacoEscolhido && !serveNoEspaco(id, espacoEscolhido);
+    return `<button class="item-mochila${equipado ? ' equipado' : ''}${apagado ? ' apagado' : ''}" data-item="${id}" ${apagado ? 'disabled' : ''}>
+        <span class="icone-presente">${iconePresente(id)}</span>
+        <span class="item-mochila-texto"><b>${it.nome}</b><small>${textoItem(it)}</small></span>
+        <span class="item-mochila-estado">${equipado ? 'Equipado' : 'Equipar'}</span>
+      </button>`;
+  }).join('');
+  $('bag-items').innerHTML = lista;
+  $('bag-hint').textContent = espacoEscolhido
+    ? `Escolha um item para: ${ESPACOS.find((e) => e.id === espacoEscolhido).nome}`
+    : 'Toque num item para equipar. Toque num lugar ocupado para guardar o item.';
+  atualizarRetrato();
+}
+
+// retrato do herói no meio da mochila (um renderizador pequeno só para ele)
+const retrato = { renderer: null, scene: null, camera: null, rig: null };
+function atualizarRetrato() {
+  if (!retrato.renderer) {
+    const canvas = $('bag-preview');
+    retrato.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    retrato.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    retrato.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    retrato.scene = new THREE.Scene();
+    retrato.scene.add(new THREE.HemisphereLight(0xdcefff, 0x4a3a28, 1.4));
+    const luz = new THREE.DirectionalLight(0xfff0d8, 1.8);
+    luz.position.set(2, 4, 5);
+    retrato.scene.add(luz);
+    retrato.camera = new THREE.PerspectiveCamera(30, 0.66, 0.1, 20);
+    retrato.camera.position.set(0, 1.2, 5.2);
+    retrato.camera.lookAt(0, 1.05, 0);
+  }
+  if (retrato.rig) {
+    retrato.scene.remove(retrato.rig.root);
+    descartarRig(retrato.rig);
+  }
+  retrato.rig = criarHeroi({ ...heroi.escolha, equipamento: heroi.equipamento });
+  retrato.rig.root.rotation.y = 0.35;
+  retrato.scene.add(retrato.rig.root);
+}
+
+function desenharRetrato(dt, t) {
+  if (!retrato.rig || $('bag-panel').classList.contains('hidden')) return;
+  const canvas = $('bag-preview');
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== Math.round(w * retrato.renderer.getPixelRatio())) {
+    retrato.renderer.setSize(w, h, false);
+    retrato.camera.aspect = w / h;
+    retrato.camera.updateProjectionMatrix();
+  }
+  retrato.rig.root.rotation.y = 0.35 + Math.sin(t * 0.6) * 0.35;
+  animarRig(retrato.rig, dt, t, 0);
+  retrato.renderer.render(retrato.scene, retrato.camera);
+}
+
+$('bag-btn').innerHTML = ICONE_MOCHILA;
+$('bag-btn').addEventListener('click', () => {
+  $('stats-panel').classList.add('hidden');
+  $('bag-btn').classList.remove('novo');
+  espacoEscolhido = null;
+  $('bag-panel').classList.toggle('hidden');
+  if (!$('bag-panel').classList.contains('hidden')) montarMochila();
+});
+$('bag-close').addEventListener('click', () => $('bag-panel').classList.add('hidden'));
+$('bag-items').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-item]');
+  if (!b || b.disabled) return;
+  const id = b.dataset.item;
+  // tocar num item já equipado (sem um lugar escolhido) guarda ele
+  const onde = Object.keys(heroi.equipamento).find((k) => heroi.equipamento[k] === id);
+  if (onde && !espacoEscolhido) guardarItem(onde);
+  else equiparItem(id);
+});
+$('bag-doll').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-espaco]');
+  if (!b) return;
+  const espaco = b.dataset.espaco;
+  if (heroi.equipamento[espaco]) {
+    espacoEscolhido = null;
+    guardarItem(espaco);
+  } else {
+    espacoEscolhido = espacoEscolhido === espaco ? null : espaco;
+    montarMochila();
+  }
+});
 
 // ------------------------------------------------------------------ Loop
 const relogio = new THREE.Clock();
@@ -1148,6 +2392,19 @@ function loop() {
     }
     mundo.atualizar(dt, tempo, tmp2.set(0, 0, 0), camera);
     luzJogador.position.set(0, 3, 2.5);
+  } else if (estado === 'criacao') {
+    atualizarPrevia(dt, tempo);
+    estudio.atualizar(dt, tempo);
+  } else if (pausado) {
+    // escolhendo a melhoria de nível: tudo parado
+  } else if (estado === 'aventura' || (estado === 'portal' && heroi)) {
+    atualizarHeroi(dt, tempo);
+    mapa.orbes.atualizar(dt, heroi);
+    atualizarAguas(dt);
+    inimigos.atualizar(dt, tempo);
+    mapa.atualizar(dt, tempo, heroi.pos, camera);
+    atualizarPortais(dt);
+    atualizarConversa(dt);
   } else if (jogador) {
     atualizarJogador(dt, tempo);
     atualizarDuendes(dt, tempo);
@@ -1160,21 +2417,29 @@ function loop() {
     luzJogador.position.set(jogador.pos.x, 3, jogador.pos.z);
     if (timerFim > 0 && estado === 'jogando') {
       timerFim -= dt;
-      if (timerFim <= 0) terminar(jogador.vivo);
+      if (timerFim <= 0) terminar();
     }
+    atualizarPortal(dt);
   }
 
   atualizarCamera(dt, tempo);
-  particulas.atualizar(dt);
+  if (!pausado) particulas.atualizar(dt);
+  if (estado === 'aventura') desenharRetrato(dt, tempo);
   numeros.atualizar(dt);
-  renderer.render(scene, camera);
+  renderer.render(cena, camera);
 }
 
 // ------------------------------------------------------------------ Tela inicial
-$('intro-btn').addEventListener('click', () => {
+function sairDaIntro() {
   const intro = $('intro-screen');
   intro.classList.add('saindo');
   setTimeout(() => intro.classList.add('hidden'), 700);
+}
+$('intro-btn').addEventListener('click', sairDaIntro);
+// pular o tutorial: vai direto para a criação do personagem
+$('skip-btn').addEventListener('click', () => {
+  sairDaIntro();
+  mostrarCriacao();
 });
 
 montarCartas();
