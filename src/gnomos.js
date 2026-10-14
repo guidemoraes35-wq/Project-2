@@ -1,6 +1,7 @@
 // Os gnomos do vilarejo. Felizes, passeiam devagar e não atacam ninguém. Se o herói
 // bater em um deles, ele (e os vizinhos) ficam bravos, mais rápidos, e revidam com
-// uma espadinha ou com a magia de terra. O Gnomo Chefe fica parado na praça.
+// uma espadinha ou com a magia de terra. O Rei Gnomo fica parado na praça; se apanhar,
+// revida com uma magia de terra poderosa.
 import * as THREE from 'three';
 import { GNOMO, GNOMO_CHEFE, calcularDano, pontosDeAtaque, vidaPorSegundo, REGRAS } from './config.js';
 import { criarGnomo, animarRig, descartarRig } from './models.js';
@@ -38,7 +39,11 @@ export function criarPovoGnomo(ctx) {
   chefeRig.root.position.set(GNOMO_CHEFE.x, 0, GNOMO_CHEFE.z);
   scene.add(chefeRig.root);
   vilarejo.addCirculo(GNOMO_CHEFE.x, GNOMO_CHEFE.z, 0.45);
-  const chefe = { rig: chefeRig, pos: chefeRig.root.position, dir: 0, expressao: null, exprT: 0, olharPara: null };
+  const chefe = {
+    rig: chefeRig, pos: chefeRig.root.position, dir: 0, expressao: null, exprT: 0, olharPara: null,
+    rei: true, hp: GNOMO_CHEFE.vida, hpMax: GNOMO_CHEFE.vida, bravo: false, raiva: 0, recarga: 0,
+    morto: false, mortoT: 0, renascerT: 0, flash: 0,
+  };
 
   /** Muda a expressão do chefe (null = parado normal). */
   function expressar(nome) {
@@ -224,6 +229,8 @@ export function criarPovoGnomo(ctx) {
 
   /** Todos se acalmam (por exemplo, quando o herói cai). */
   function acalmar() {
+    if (chefe.bravo) expressar(null);
+    chefe.bravo = false;
     for (const g of gnomos) {
       g.bravo = false;
       g.ataqueT = -1;
@@ -234,8 +241,54 @@ export function criarPovoGnomo(ctx) {
    * Golpe do herói: acerta gnomos dentro do alcance e do arco à frente.
    * Retorna quantos foram atingidos.
    */
+  /** Golpe no Rei Gnomo: ele fica bravo e revida. */
+  function ferirRei(ataque, origem) {
+    if (chefe.morto) return;
+    const dano = calcularDano(ataque, GNOMO_CHEFE.defesa);
+    chefe.hp -= dano;
+    chefe.flash = 0.15;
+    tmp.copy(chefe.pos).setY(2.1);
+    numeros.mostrar(tmp, dano, 'inimigo');
+    particulas.emitir(tmp.setY(1.0), 0xff4433, 14, { vel: 3.5, vida: 0.5, gravidade: 9 });
+    if (!chefe.bravo) expressar('bravo');
+    chefe.bravo = true;
+    chefe.raiva = GNOMO.raiva;
+    if (chefe.hp <= 0) {
+      chefe.morto = true;
+      chefe.mortoT = 0;
+      chefe.renascerT = GNOMO_CHEFE.renascer;
+      chefe.bravo = false;
+      expressar(null);
+      particulas.emitir(tmp.setY(1.0), 0xffe08a, 50, { vel: 4, vida: 1.2, subir: 1 });
+      ctx.aoMorrer?.(chefe);
+    }
+  }
+
+  /** Golpe que já escolheu o alvo (o jato de água da vara). */
+  function atingir(alvo, ataque, origem) {
+    if (alvo === chefe) ferirRei(ataque, origem);
+    else if (!alvo.morto) {
+      ferir(alvo, calcularDano(ataque, GNOMO.defesa), origem);
+      alertarVizinhos(alvo.pos);
+    }
+  }
+
+  function alertarVizinhos(origem) {
+    for (const g of gnomos) {
+      if (!g.morto && !g.bravo && distXZ(g.pos, origem) < GNOMO.raioAlerta) ficarBravo(g);
+    }
+  }
+
   function atacar(origem, dir, alcance, arco, ataque) {
     let acertos = 0;
+    if (!chefe.morto) {
+      const d = distXZ(chefe.pos, origem);
+      const ang = Math.atan2(chefe.pos.x - origem.x, chefe.pos.z - origem.z);
+      if (d < alcance + 0.45 && (d < 0.6 || Math.abs(difAngulo(dir, ang)) <= arco / 2)) {
+        ferirRei(ataque, origem);
+        acertos++;
+      }
+    }
     for (const g of gnomos) {
       if (g.morto) continue;
       const d = distXZ(g.pos, origem);
@@ -245,12 +298,8 @@ export function criarPovoGnomo(ctx) {
       ferir(g, calcularDano(ataque, GNOMO.defesa), origem);
       acertos++;
     }
-    if (acertos) {
-      // os vizinhos viram a briga e também ficam bravos
-      for (const g of gnomos) {
-        if (!g.morto && !g.bravo && distXZ(g.pos, origem) < GNOMO.raioAlerta) ficarBravo(g);
-      }
-    }
+    // os vizinhos viram a briga e também ficam bravos
+    if (acertos) alertarVizinhos(origem);
     return acertos;
   }
 
@@ -272,12 +321,13 @@ export function criarPovoGnomo(ctx) {
       g.barra.visible = false;
       particulas.emitir(tmp.setY(0.6), 0xffe08a, 30, { vel: 3, vida: 1, subir: 1 });
       renascer.push(GNOMO.renascer);
+      ctx.aoMorrer?.(g);
     }
   }
 
   // ---------- Magia de terra: aviso no chão e espinhos de pedra saindo da terra ----------
-  function lancarMagia(g, heroi) {
-    const cfg = GNOMO.magia;
+  function lancarMagia(g, heroi, forca = GNOMO.inteligencia, escala = 1) {
+    const cfg = { ...GNOMO.magia, raio: GNOMO.magia.raio * escala };
     const x = heroi.pos.x, z = heroi.pos.z;
     const aviso = new THREE.Mesh(
       new THREE.RingGeometry(cfg.raio - 0.22, cfg.raio, 32).rotateX(-Math.PI / 2),
@@ -299,7 +349,7 @@ export function criarPovoGnomo(ctx) {
     espinhos.scale.y = 0.001;
     espinhos.visible = false;
     scene.add(aviso, espinhos);
-    magias.push({ x, z, t: 0, aviso, espinhos, acertou: false, dono: g });
+    magias.push({ x, z, t: 0, aviso, espinhos, acertou: false, dono: g, forca, raio: cfg.raio });
     tmp.copy(g.rig.pedraMagia ? g.rig.pedraMagia.getWorldPosition(tmp) : g.pos);
     particulas.emitir(tmp, 0xc8a050, 20, { vel: 2, vida: 0.6, subir: 1 });
   }
@@ -324,9 +374,9 @@ export function criarPovoGnomo(ctx) {
       // sobem rápido, ficam um pouco e afundam
       m.espinhos.scale.y = t < 0.12 ? Math.max(0.001, t / 0.12) : t < 0.8 ? 1 : Math.max(0.001, 1 - (t - 0.8) / 0.4);
       m.aviso.material.opacity = Math.max(0, 0.5 - t);
-      if (!m.acertou && t < 0.3 && heroi && ctx.heroiVisivel() && Math.hypot(heroi.pos.x - m.x, heroi.pos.z - m.z) < cfg.raio + heroi.raio) {
+      if (!m.acertou && t < 0.3 && heroi && ctx.heroiVisivel() && Math.hypot(heroi.pos.x - m.x, heroi.pos.z - m.z) < m.raio + heroi.raio) {
         m.acertou = true;
-        ctx.danoHeroi(calcularDano(pontosDeAtaque(GNOMO, cfg.atributo), heroi.atributos.defesa), tmp.set(m.x, 0, m.z));
+        ctx.danoHeroi(calcularDano(m.forca, heroi.atributos.defesa), tmp.set(m.x, 0, m.z));
       }
       if (t > 1.25) {
         scene.remove(m.aviso, m.espinhos);
@@ -505,16 +555,52 @@ export function criarPovoGnomo(ctx) {
         }
       }
     }
-    // o chefe olha para o herói quando ele chega perto
+    atualizarRei(dt, t, heroi);
+  }
+
+  function atualizarRei(dt, t, heroi) {
+    const r = chefe.rig;
+    if (chefe.morto) {
+      // cai, some e, depois de um tempo, volta para a praça
+      chefe.mortoT += dt;
+      r.root.rotation.x = Math.max(-Math.PI / 2, r.root.rotation.x - dt * 4);
+      if (chefe.mortoT > 2.5) r.root.visible = false;
+      chefe.renascerT -= dt;
+      if (chefe.renascerT <= 0) {
+        chefe.morto = false;
+        chefe.hp = chefe.hpMax;
+        r.root.rotation.x = 0;
+        r.root.visible = true;
+        tmp.copy(chefe.pos).setY(1);
+        particulas.emitir(tmp, 0x8fffc8, 60, { vel: 4, vida: 1, subir: 1 });
+      }
+      return;
+    }
+    const visivel = ctx.heroiVisivel();
+    if (chefe.bravo) {
+      chefe.raiva -= dt;
+      chefe.recarga -= dt;
+      if (chefe.raiva <= 0 || !visivel) {
+        chefe.bravo = false;
+        expressar(null);
+      } else if (chefe.recarga <= 0) {
+        // magia de terra do rei: maior e muito mais forte
+        chefe.recarga = GNOMO_CHEFE.recargaMagia;
+        lancarMagia(chefe, heroi, GNOMO_CHEFE.inteligencia, 1.5);
+      }
+    }
+    // olha para o herói quando ele chega perto (ou quando está bravo)
     if (heroi) {
-      const perto = distXZ(heroi.pos, chefe.pos) < 7;
+      const perto = chefe.bravo || distXZ(heroi.pos, chefe.pos) < 7;
       const alvo = perto ? Math.atan2(heroi.pos.x - chefe.pos.x, heroi.pos.z - chefe.pos.z) : 0;
       chefe.dir = girarPara(chefe.dir, alvo, dt * 3);
     }
-    chefe.rig.root.rotation.y = chefe.dir;
-    animarRig(chefe.rig, dt, t, 0);
+    r.root.rotation.y = chefe.dir;
+    animarRig(r, dt, t, 0);
     aplicarExpressao(dt, t);
-    if (chefe.rig.cristal) chefe.rig.cristal.rotation.y = t * 1.5;
+    if (r.cristal) r.cristal.rotation.y = t * 1.5;
+    chefe.flash = Math.max(0, chefe.flash - dt);
+    r.pele.emissive.setRGB(chefe.flash > 0 ? 1 : 0, chefe.flash > 0 ? 0.25 : 0, chefe.flash > 0 ? 0.2 : 0);
   }
 
   return {
@@ -526,7 +612,8 @@ export function criarPovoGnomo(ctx) {
     acalmar,
     expressar,
     raioMortal,
-    /** Gnomos vivos (para a mira automática do herói). */
-    alvos: () => gnomos.filter((g) => !g.morto),
+    atingir,
+    /** Gnomos vivos e o rei (para a mira automática e o jato de água). */
+    alvos: () => [...gnomos.filter((g) => !g.morto), ...(chefe.morto ? [] : [chefe])],
   };
 }

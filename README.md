@@ -34,36 +34,70 @@ Ficam calmos de novo depois de 20 s sem apanhar. Um gnomo derrotado é substitu�
 | --- | --- | --- | --- | --- | --- |
 | Gnomo | 120 | 30 | 20 (feliz) / 45 (bravo) | 30 | 80 |
 
-O **Gnomo Chefe** fica parado na praça, ao lado do poço, com coroa em vez de chapéu pontudo.
-Chegando perto dele aparece o botão **Falar com o Gnomo Chefe**.
+O **Rei Gnomo** fica parado na praça, ao lado do poço, com coroa em vez de chapéu pontudo.
+Chegando perto dele aparece o botão **Falar com o Rei Gnomo**. Ele também pode ser atacado
+(vida 300, poder 40, defesa 40, inteligência 120): revida com uma magia de terra enorme e, se for
+derrotado, volta à praça depois de 40 s.
 
 ### Conversas
 
 Em qualquer conversa, o joystick e o botão de ataque somem, o herói fica parado olhando para quem
 fala e a câmera se aproxima dos dois. As falas ficam em `src/conversas.js`.
 
-Na conversa do Gnomo Chefe ele desconfia, se espanta ("UM HUMANO???"), tenta lembrar, pensa e
+Na conversa do Rei Gnomo ele desconfia, se espanta ("UM HUMANO???"), tenta lembrar, pensa e
 pergunta se o herói topa ajudar a vila:
 - **Não:** o chefe cai na risada e acaba com o herói na hora (ele volta na entrada da vila).
 - **Sim:** o chefe conta da peste dos duendes, promete um presente "apropriado" e um **portal
   verde** se abre no fundo da vila, perto do moinho, levando ao castelo dos duendes.
 
+O jogo não mostra dicas de para onde ir: o jogador descobre o mundo sozinho.
+
 ## Castelo dos Duendes
 
-Um pátio murado ao entardecer, com torres, a fortaleza no fundo, fogueira, tendas e barricadas.
-Os duendes ficam parados até o herói chegar perto (13 m). Um contador no alto mostra quantos faltam;
-derrotando todos, abre-se um portal de volta para a vila. Se o herói cair, volta no portão do castelo.
+A entrada é um pátio murado ao entardecer (torres, fogueira, tendas e barricadas). Uma passagem em
+arco pela fortaleza leva a um **labirinto de corredores** com vários caminhos possíveis e, no fim
+dele, à **sala do tesouro**, cheia de ouro e joias, onde está a **Princesa Duendete**. Os duendes
+ficam parados até o herói chegar perto (9 m) e estão espalhados: 6 duendes fracos no pátio e o
+resto pelo labirinto, com arqueiros e mágicos do meio para o fim do caminho. No labirinto a câmera
+fica mais alta, olhando por cima das paredes. Se o herói cair, volta no portão do castelo.
 
 | | Vida | Poder | Velocidade | Defesa | Inteligência | Quantidade |
 | --- | --- | --- | --- | --- | --- | --- |
 | Duende fraco (clava) | 20 | 5 | 20 | 5 | 0 | 30 |
 | Duende arqueiro (flechas) | 20 | 8 | 15 | 0 | 0 | 8 |
 | Duende mágico (veneno) | 5 | 5 | 30 | 5 | 20 | 6 |
+| Princesa Duendete | 80 | 10 | 30 | 15 | 30 | 1 |
+
+A **Princesa Duendete** foge do herói pela sala e, a cada 5 s, chama 5 duendes fracos para atacá-lo
+(no máximo 15 de uma vez). Derrotada, aparece um **portal azul-claro** que volta à vila dos gnomos.
+
+No meio do labirinto há um **baú** com um **Escudo** (+15 Defesa, −3 Velocidade). Quem ganhou o escudo
+de presente encontra o **Escudo Duendeiro**, verde e com espinhos (+20 Defesa, −5 Velocidade).
+Só dá para segurar um escudo por vez.
+
+### Ataques do herói
+
+- **Espada:** golpe de perto (Poder).
+- **Vara:** jato de água que voa até o inimigo (Inteligência).
+- **Escudo ou nada na mão:** socos (Poder).
+
+O **veneno** do duende mágico não causa dano no contato: tira 1 de vida por segundo durante 3 s
+(a barra de vida fica verde enquanto isso).
 
 ### Experiência e níveis
 
-Duendes fracos e arqueiros deixam cair **XP**: uma molécula vermelha brilhante que voa até o herói
-quando ele chega perto (duende fraco 5 XP, arqueiro 8 XP). O herói começa no **nível 1** e sobe de
+Inimigos derrotados deixam cair **XP**: moléculas vermelhas brilhantes que voam até o herói quando ele
+chega perto. Não existe XP no tutorial.
+
+| | XP |
+| --- | --- |
+| Duende fraco | 1 |
+| Duende arqueiro | 1 |
+| Duende mágico | 2 |
+| Princesa Duendete | 10 |
+| Gnomo | 30 |
+| Rei Gnomo | 50 |
+ O herói começa no **nível 1** e sobe de
 nível ao juntar **15 + 5N** de XP (N = nível atual), até o **nível 10**. A cada nível o jogo pausa
 e o jogador escolhe uma melhoria:
 
@@ -77,9 +111,6 @@ e o jogador escolhe uma melhoria:
 
 No computador também dá para escolher com as teclas A a E. O nível e o XP aparecem embaixo da
 barra de vida e no painel do personagem.
-
-O **veneno** do duende mágico não causa dano no contato: tira 1 de vida por segundo durante 3 s
-(a barra de vida fica verde enquanto isso).
 
 ### Atributos do personagem definitivo
 
@@ -188,7 +219,7 @@ src/world.js      trilha, rio, floresta, lamparinas, clareira final, lua, colis�
 src/portal.js     portal verde que se abre quando o chefão morre
 src/estudio.js    cenário da criação do personagem (pedestal mágico)
 src/vilarejo.js   vilarejo: casas, praça, poço, feira, horta, moinho e colisões
-src/gnomos.js     gnomos do vilarejo: passeio, raiva, espada, magia de terra e o Gnomo Chefe (expressões)
+src/gnomos.js     gnomos do vilarejo: passeio, raiva, espada, magia de terra e o Rei Gnomo (expressões)
 src/conversas.js  falas das conversas
 src/castelo.js    castelo dos duendes: muralhas, torres, fortaleza, pátio e colisões
 src/duendesCastelo.js  duendes do castelo: fracos, arqueiros e mágicos (veneno)

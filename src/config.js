@@ -209,18 +209,31 @@ export const HEROI_BASE = { vida: 10, poder: 5, velocidade: 25, defesa: 5, intel
 /** Quantos itens o herói pode segurar ao mesmo tempo. */
 export const MAX_EQUIPADOS = 2;
 
-/** Item de presente e o bônus que ele dá nos atributos. */
-export const PRESENTES = [
-  { id: 'espada', nome: 'Espada', bonus: { poder: 15 } },
-  { id: 'vara', nome: 'Vara', bonus: { inteligencia: 10, vida: 5 } },
-  { id: 'escudo', nome: 'Escudo', bonus: { defesa: 15, velocidade: -3 } },
+/**
+ * Todos os itens e o bônus de cada um. Os três primeiros são os presentes da criação.
+ * A espada ataca de perto, a vara lança água e os escudos não têm ataque próprio (o herói dá socos).
+ */
+export const ITENS = [
+  { id: 'espada', nome: 'Espada', bonus: { poder: 15 }, presente: true },
+  { id: 'vara', nome: 'Vara', bonus: { inteligencia: 10, vida: 5 }, presente: true },
+  { id: 'escudo', nome: 'Escudo', bonus: { defesa: 15, velocidade: -3 }, presente: true, escudo: true },
+  { id: 'escudoDuendeiro', nome: 'Escudo Duendeiro', bonus: { defesa: 20, velocidade: -5 }, escudo: true },
 ];
+export const PRESENTES = ITENS.filter((i) => i.presente);
+export const item = (id) => ITENS.find((i) => i.id === id);
+
+/** Ataques do herói: depende do que ele segura na mão direita. */
+export const ATAQUES_HEROI = {
+  espada: { tipo: 'corte', atributo: 'poder', alcance: 1.9, arco: Math.PI * 0.7, recarga: 0.55, duracao: 0.45, acerto: 0.2 },
+  vara: { tipo: 'agua', atributo: 'inteligencia', alcance: 10, velocidade: 14, recarga: 0.75, duracao: 0.5, acerto: 0.22 },
+  soco: { tipo: 'soco', atributo: 'poder', alcance: 1.35, arco: Math.PI * 0.5, recarga: 0.4, duracao: 0.32, acerto: 0.13 },
+};
 
 /** Atributos finais do herói: base + bônus dos itens equipados. */
 export function atributosHeroi(equipados) {
   const total = { ...HEROI_BASE };
   for (const id of equipados) {
-    const bonus = PRESENTES.find((p) => p.id === id)?.bonus || {};
+    const bonus = item(id)?.bonus || {};
     for (const [k, v] of Object.entries(bonus)) total[k] += v;
   }
   return total;
@@ -263,8 +276,12 @@ export const GNOMO = {
   },
 };
 
+/** O Rei Gnomo (antes "Gnomo Chefe"). Também pode ser atacado: revida com magia de terra. */
 export const GNOMO_CHEFE = {
-  nome: 'Gnomo Chefe',
+  nome: 'Rei Gnomo',
+  vida: 300, poder: 40, velocidade: 0, defesa: 40, inteligencia: 120,
+  recargaMagia: 2.2,
+  renascer: 40,           // segundos até o rei voltar à praça depois de derrotado
   x: 0,
   z: 2.7,                 // na praça, ao lado do poço
   distanciaConversa: 3,
@@ -273,7 +290,17 @@ export const GNOMO_CHEFE = {
 // ------------------------------------------------------------------ Castelo dos duendes
 // Os duendes do castelo começam parados e atacam quando o herói chega perto.
 export const CASTELO = {
-  alerta: 13,  // distância em que um duende nota o herói
+  alerta: 9,   // distância em que um duende nota o herói
+  duendesNoPatio: 6, // duendes fracos na entrada; o resto fica espalhado no labirinto
+};
+
+/** Princesa Duendete: a cada 5 s chama 5 duendes fracos para atacar o herói. */
+export const PRINCESA = {
+  nome: 'Princesa Duendete',
+  vida: 80, poder: 10, velocidade: 30, defesa: 15, inteligencia: 30,
+  invocacao: { intervalo: 5, quantidade: 5, preparo: 0.8, duracao: 1.2, maximo: 15 },
+  distanciaIdeal: 7,
+  raio: 0.45, escala: 1.2, alturaAcerto: 0.8,
 };
 
 export const DUENDE_FRACO = {
@@ -310,8 +337,13 @@ export const DUENDE_MAGICO = {
 
 // ------------------------------------------------------------------ Experiência e níveis
 export const XP = {
-  porDuende: 5,        // XP do orbe de um duende fraco
-  porArqueiro: 8,      // XP do orbe de um duende arqueiro
+  // XP que cada um deixa cair ao ser derrotado (não existe XP no tutorial)
+  porDuende: 1,
+  porArqueiro: 1,
+  porMagico: 2,
+  porPrincesa: 10,
+  porGnomo: 30,
+  porRei: 50,
   nivelMaximo: 10,
   raioIma: 3,          // o orbe voa até o herói a esta distância
   raioColeta: 0.7,

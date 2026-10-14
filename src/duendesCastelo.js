@@ -1,8 +1,9 @@
-// Os duendes do castelo: fracos (clava), arqueiros (flechas) e mágicos (veneno).
-// Ficam parados pelo pátio até o herói chegar perto; aí atacam até alguém cair.
+// Os duendes do castelo: fracos (clava), arqueiros (flechas) e mágicos (veneno),
+// espalhados pela entrada e pelo labirinto, e a Princesa Duendete na sala do tesouro.
+// Ficam parados até o herói chegar perto; aí atacam até alguém cair.
 import * as THREE from 'three';
 import {
-  DUENDE_FRACO, ARQUEIRO_CASTELO, DUENDE_MAGICO, CASTELO, REGRAS, calcularDano, pontosDeAtaque,
+  DUENDE_FRACO, ARQUEIRO_CASTELO, DUENDE_MAGICO, PRINCESA, CASTELO, REGRAS, calcularDano, pontosDeAtaque,
 } from './config.js';
 import { criarDuende, animarRig, descartarRig } from './models.js';
 import { texturaBrilho } from './world.js';
@@ -44,8 +45,7 @@ export function criarDuendesCastelo(ctx) {
   let derrotados = 0;
   let total = 0;
 
-  function criar(cfg, variante) {
-    const p = mapa.pontoLivre(0.7, cfg === DUENDE_FRACO ? -8 : -14);
+  function criar(cfg, variante, p, alerta = false) {
     const rig = criarDuende(variante);
     rig.root.scale.setScalar(cfg.escala);
     rig.root.position.set(p.x, 0, p.z);
@@ -57,14 +57,18 @@ export function criarDuendesCastelo(ctx) {
     barra.add(fill);
     barra.visible = false;
     scene.add(barra);
-    duendes.push({
+    const d = {
       cfg, rig, pos: rig.root.position, dir: Math.random() * Math.PI * 2,
-      hp: cfg.vida, hpMax: cfg.vida, alerta: false,
+      hp: cfg.vida, hpMax: cfg.vida, alerta,
       recarga: aleatorio(0.5, 1.5), ataqueT: -1, acertou: false, andar: 0, flash: 0,
       empurrao: new THREE.Vector3(), desvio: aleatorio(-1, 1), morto: false, mortoT: 0,
       barra, fill,
-    });
+    };
+    duendes.push(d);
+    return d;
   }
+
+  let princesa = null;
 
   function remover(d) {
     scene.remove(d.rig.root, d.barra);
@@ -77,9 +81,15 @@ export function criarDuendesCastelo(ctx) {
     duendes.length = 0;
     for (const t of tiros) scene.remove(t.malha);
     tiros.length = 0;
-    for (let i = 0; i < DUENDE_FRACO.quantidade; i++) criar(DUENDE_FRACO, 'normal');
-    for (let i = 0; i < ARQUEIRO_CASTELO.quantidade; i++) criar(ARQUEIRO_CASTELO, 'arqueiro');
-    for (let i = 0; i < DUENDE_MAGICO.quantidade; i++) criar(DUENDE_MAGICO, 'magico');
+    // alguns duendes fracos na entrada; o resto espalhado pelo labirinto,
+    // com arqueiros e mágicos do meio para o fim do caminho
+    for (let i = 0; i < CASTELO.duendesNoPatio; i++) criar(DUENDE_FRACO, 'normal', mapa.pontoPatio(0.7));
+    for (let i = CASTELO.duendesNoPatio; i < DUENDE_FRACO.quantidade; i++) criar(DUENDE_FRACO, 'normal', mapa.pontoLabirinto(0.05, 1, 0.7));
+    for (let i = 0; i < ARQUEIRO_CASTELO.quantidade; i++) criar(ARQUEIRO_CASTELO, 'arqueiro', mapa.pontoLabirinto(0.35, 1, 0.7));
+    for (let i = 0; i < DUENDE_MAGICO.quantidade; i++) criar(DUENDE_MAGICO, 'magico', mapa.pontoLabirinto(0.45, 1, 0.7));
+    princesa = criar(PRINCESA, 'princesa', mapa.centroSala);
+    princesa.dir = 0;
+    princesa.invocarT = 2;
     total = duendes.length;
     derrotados = 0;
   }
@@ -97,13 +107,16 @@ export function criarDuendesCastelo(ctx) {
     d.flash = 0.15;
     tmp.subVectors(d.pos, origem).setY(0).normalize().multiplyScalar(6);
     d.empurrao.copy(tmp);
-    d.ataqueT = -1;
-    d.recarga = Math.max(d.recarga, 0.4);
+    if (d !== princesa) {
+      d.ataqueT = -1;
+      d.recarga = Math.max(d.recarga, 0.4);
+    }
     tmp.copy(d.pos).setY(d.cfg.alturaAcerto + 0.6);
     numeros.mostrar(tmp, dano, 'inimigo');
     particulas.emitir(tmp, 0xff4433, 12, { vel: 3.5, vida: 0.5, gravidade: 9 });
-    d.barra.visible = true;
+    d.barra.visible = d !== princesa;
     d.alerta = true;
+    if (d === princesa) ctx.aoFerirPrincesa?.(d);
     if (d.hp <= 0) {
       d.morto = true;
       d.barra.visible = false;
@@ -125,6 +138,62 @@ export function criarDuendesCastelo(ctx) {
       acertos++;
     }
     return acertos;
+  }
+
+  /** Um golpe que já escolheu o alvo (o jato de água da vara). */
+  function atingir(d, ataque, origem) {
+    if (!d.morto) ferir(d, calcularDano(ataque, d.cfg.defesa), origem);
+  }
+
+  // ---------- Princesa Duendete: chama duendes fracos a cada 5 s ----------
+  function atualizarPrincesa(d, dt, heroi, visivel) {
+    const cfg = PRINCESA;
+    const inv = cfg.invocacao;
+    if (visivel && mapa.naSala(heroi.pos.x, heroi.pos.z) && !d.alerta) {
+      d.alerta = true;
+      ctx.aoFerirPrincesa?.(d);
+    }
+    if (!d.alerta || !visivel) return 0;
+    const dist = distXZ(d.pos, heroi.pos);
+    const alvoAng = Math.atan2(heroi.pos.x - d.pos.x, heroi.pos.z - d.pos.z);
+    d.dir = girarPara(d.dir, alvoAng, dt * 6);
+    if (d.ataqueT >= 0) {
+      d.ataqueT += dt;
+      if (!d.acertou && d.ataqueT >= inv.preparo) {
+        d.acertou = true;
+        const vivos = duendes.filter((o) => o.invocado && !o.morto).length;
+        const n = Math.min(inv.quantidade, inv.maximo - vivos);
+        for (let i = 0; i < n; i++) {
+          const a = (i / inv.quantidade) * Math.PI * 2;
+          const p = mapa.pontoSala(d.pos.x + Math.cos(a) * 1.8, d.pos.z + Math.sin(a) * 1.8);
+          const novo = criar(DUENDE_FRACO, 'normal', p, true);
+          novo.invocado = true;
+          novo.recarga = 0.6;
+          tmp.set(p.x, 0.5, p.z);
+          particulas.emitir(tmp, 0xff6ac8, 25, { vel: 3, vida: 0.7, subir: 1.5 });
+        }
+        total += n;
+        tmp.copy(d.pos).setY(1.6);
+        particulas.emitir(tmp, 0xffa8e0, 50, { vel: 5, vida: 0.8, subir: 1 });
+      }
+      if (d.ataqueT >= inv.duracao) d.ataqueT = -1;
+      return 0;
+    }
+    d.invocarT -= dt;
+    if (d.invocarT <= 0) {
+      d.invocarT = inv.intervalo;
+      d.ataqueT = 0;
+      d.acertou = false;
+      return 0;
+    }
+    // mantém distância do herói, rodeando a sala
+    const vel = cfg.velocidade * REGRAS.escalaVelocidade;
+    let ang = alvoAng + Math.PI / 2 * (d.desvio >= 0 ? 1 : -1), v = vel * 0.5;
+    if (dist < cfg.distanciaIdeal - 2) { ang = alvoAng + Math.PI; v = vel; }
+    else if (dist > cfg.distanciaIdeal + 3) { ang = alvoAng; v = vel * 0.6; }
+    d.pos.x += Math.sin(ang) * v * dt;
+    d.pos.z += Math.cos(ang) * v * dt;
+    return v / vel;
   }
 
   // ---------- Tiros: flechas e veneno ----------
@@ -196,13 +265,15 @@ export function criarDuendesCastelo(ctx) {
     const cfg = d.cfg;
     const visivel = ctx.heroiVisivel();
     const dist = heroi ? distXZ(d.pos, heroi.pos) : Infinity;
-    if (visivel && dist < CASTELO.alerta) d.alerta = true;
     const vel = cfg.velocidade * REGRAS.escalaVelocidade * (0.9 + (d.desvio + 1) * 0.08);
     const alvoAng = heroi ? Math.atan2(heroi.pos.x - d.pos.x, heroi.pos.z - d.pos.z) : d.dir;
     let movendo = 0;
     d.recarga -= dt;
+    if (d !== princesa && visivel && dist < CASTELO.alerta) d.alerta = true;
 
-    if (d.ataqueT >= 0) {
+    if (d === princesa) {
+      movendo = atualizarPrincesa(d, dt, heroi, visivel);
+    } else if (d.ataqueT >= 0) {
       d.ataqueT += dt;
       if (!d.acertou && d.ataqueT >= cfg.preparo) {
         d.acertou = true;
@@ -272,7 +343,8 @@ export function criarDuendesCastelo(ctx) {
 
     d.andar += (movendo - d.andar) * Math.min(1, dt * 10);
     rig.root.rotation.y = d.dir;
-    animarRig(rig, dt, t, d.andar, d.ataqueT >= 0 ? d.ataqueT / cfg.duracaoAtaque : -1);
+    const duracao = d === princesa ? PRINCESA.invocacao.duracao : cfg.duracaoAtaque;
+    animarRig(rig, dt, t, d.andar, d.ataqueT >= 0 ? d.ataqueT / duracao : -1);
     if (rig.orbe) rig.orbe.material.emissiveIntensity = 1.6 + Math.sin(t * 6 + d.desvio * 4) * 0.6;
     d.flash = Math.max(0, d.flash - dt);
     rig.pele.emissive.setRGB(d.flash > 0 ? 1 : 0, d.flash > 0 ? 0.25 : 0, d.flash > 0 ? 0.2 : 0);
@@ -297,7 +369,9 @@ export function criarDuendesCastelo(ctx) {
     reiniciar,
     atualizar,
     atacar,
+    atingir,
     acalmar,
+    princesa: () => princesa,
     alvos: () => duendes.filter((d) => !d.morto),
     restantes: () => total - derrotados,
     total: () => total,

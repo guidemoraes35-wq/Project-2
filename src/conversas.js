@@ -1,7 +1,7 @@
 // Falas das conversas do jogo. Cada fala tem o texto e a expressão de quem fala;
 // uma fala com `opcoes` espera a resposta do jogador.
 
-/** Primeira conversa com o Gnomo Chefe. */
+/** Primeira conversa com o Rei Gnomo. */
 export const CONVERSA_CHEFE = [
   { texto: 'Mmmmmm….. você…..', expressao: 'desconfiado' },
   { texto: 'UM HUMANO???', expressao: 'surpreso' },
@@ -30,7 +30,7 @@ export const CONVERSA_CHEFE_NAO = [
 
 /** Depois que o castelo é libertado (a recompensa ainda será definida). */
 export const CONVERSA_CHEFE_VITORIA = [
-  { texto: 'Você conseguiu! O castelo está livre dos duendes! Seu presente….. logo, logo.', expressao: 'misterioso' },
+  { texto: 'Você derrotou a Princesa Duendete! Seu presente….. logo, logo.', expressao: 'misterioso' },
 ];
 
 /** Se o jogador voltar a falar com o chefe depois de aceitar a missão. */

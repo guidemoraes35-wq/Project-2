@@ -14,7 +14,7 @@ import { criarPovoGnomo } from './gnomos.js';
 import { criarCastelo } from './castelo.js';
 import { criarDuendesCastelo } from './duendesCastelo.js';
 import { criarOrbes } from './xp.js';
-import { XP, xpParaSubir, MELHORIAS, DUENDE_FRACO, ARQUEIRO_CASTELO } from './config.js';
+import { XP, xpParaSubir, MELHORIAS, DUENDE_FRACO, ARQUEIRO_CASTELO, DUENDE_MAGICO, PRINCESA, ITENS, item, ATAQUES_HEROI } from './config.js';
 import { CONVERSA_CHEFE, CONVERSA_CHEFE_SIM, CONVERSA_CHEFE_NAO, CONVERSA_CHEFE_LEMBRETE, CONVERSA_CHEFE_VITORIA } from './conversas.js';
 
 // ------------------------------------------------------------------ Elementos
@@ -1175,7 +1175,22 @@ function atualizarCamera(dt, t) {
     foco = tmp2.set((heroi.pos.x + c.x) / 2, 0, (heroi.pos.z + c.z) / 2);
   }
   alvoCam.set(foco.x, 1.3 - (1 - (cam.zoom ?? 1)) * 0.6, foco.z);
-  const dist = cam.dist * (cam.zoom ?? 1);
+  let dist = cam.dist * (cam.zoom ?? 1);
+  // nos corredores do labirinto a câmera fica mais alta, olhando por cima das paredes
+  const noLabirinto = heroi && mapa === castelo && castelo.noLabirinto(heroi.pos.z);
+  cam.minPitch = (cam.minPitch ?? 0.08) + ((noLabirinto ? 0.85 : 0.08) - (cam.minPitch ?? 0.08)) * Math.min(1, dt * 3);
+  if (cam.pitch < cam.minPitch) cam.pitch = cam.minPitch;
+  // se uma parede ficar entre a câmera e o herói, a câmera chega mais perto
+  if (heroi && mapa?.colide && (estado === 'aventura' || estado === 'portal')) {
+    const sp = Math.sin(cam.yaw) * Math.cos(cam.pitch), cpz = Math.cos(cam.yaw) * Math.cos(cam.pitch);
+    for (let d = 0.8; d < dist; d += 0.35) {
+      const y = alvoCam.y + Math.sin(cam.pitch) * d;
+      if (y < 4 && mapa.colide(alvoCam.x + sp * d, alvoCam.z + cpz * d, 0.2)) {
+        dist = Math.max(1.2, d - 0.4);
+        break;
+      }
+    }
+  }
   const cp = Math.cos(cam.pitch);
   camera.position.set(
     alvoCam.x + Math.sin(cam.yaw) * cp * dist,
@@ -1267,6 +1282,15 @@ function iconePresente(id) {
       <path d="M50.5 12 L56 6" stroke="#c8d2e0" stroke-width="7"/>
       <path d="M8 58 L12 54" stroke="#c8d2e0" stroke-width="7"/>
       <circle cx="18" cy="47" r="2.8" fill="#5a3a20"/><circle cx="43" cy="20" r="2.8" fill="#5a3a20"/></svg>`;
+  }
+  if (id === 'escudoDuendeiro') {
+    // escudo verde com espinhos e uma pedra brilhante
+    return `<svg viewBox="0 0 64 64" aria-hidden="true">
+      <g fill="#8a9a5a">${[0, 60, 120, 180, 240, 300].map((a) => `<path d="M32 3 L36 10 L28 10 Z" transform="rotate(${a + 30} 32 32)"/>`).join('')}</g>
+      <circle cx="32" cy="32" r="23" fill="#3f8a2a"/>
+      <rect x="27.5" y="9" width="9" height="46" fill="#1f4a14"/>
+      <circle cx="32" cy="32" r="24" fill="none" stroke="#8a9a5a" stroke-width="4"/>
+      <path d="M32 24 L39 32 L32 40 L25 32 Z" fill="#9dff6a" stroke="#3ad02a" stroke-width="1.5"/></svg>`;
   }
   const cor = escolha.roupa ? hex(escolha.roupa.principal) : '#8a5a30';
   const faixa = escolha.roupa ? hex(escolha.roupa.detalhe) : '#c8b48a';
@@ -1446,8 +1470,9 @@ let mapa = null;             // mapa onde o herói está
 let inimigos = null;         // personagens do mapa atual (gnomos ou duendes)
 let portais = [];            // { portal, mapa, destino }
 let missaoAceita = false;    // o herói aceitou ajudar os gnomos
-let casteloLivre = false;    // todos os duendes do castelo foram derrotados
-let orbes = null;            // orbes de XP do castelo
+let princesaDerrotada = false; // a Princesa Duendete foi derrotada
+let bauAberto = false;       // o baú do labirinto já foi aberto
+let aguas = [];              // jatos de água da vara
 let pausado = false;         // o jogo para enquanto o jogador escolhe a melhoria de nível
 let niveisPendentes = 0;     // níveis ganhos que ainda esperam uma escolha
 
@@ -1471,21 +1496,27 @@ function contexto(scene, extra) {
 function prepararVilarejo() {
   if (vilarejo) return;
   vilarejo = criarVilarejo();
-  povo = criarPovoGnomo(contexto(vilarejo.scene, { vilarejo }));
+  vilarejo.orbes = criarOrbes({ scene: vilarejo.scene, particulas, coletar: ganharXP });
+  povo = criarPovoGnomo(contexto(vilarejo.scene, {
+    vilarejo,
+    aoMorrer: (g) => soltarXP(vilarejo, g.pos, g.rei ? XP.porRei : XP.porGnomo),
+  }));
   povo.reiniciar();
 }
 
 function prepararCastelo() {
   if (castelo) return;
   castelo = criarCastelo();
-  orbes = criarOrbes({ scene: castelo.scene, particulas, coletar: ganharXP });
+  castelo.orbes = criarOrbes({ scene: castelo.scene, particulas, coletar: ganharXP });
   duendesCastelo = criarDuendesCastelo(contexto(castelo.scene, {
     mapa: castelo,
-    // duendes fracos e arqueiros deixam cair XP
     aoMorrer(d) {
-      if (d.cfg === DUENDE_FRACO) orbes.soltar(d.pos.x, d.pos.z, XP.porDuende);
-      else if (d.cfg === ARQUEIRO_CASTELO) orbes.soltar(d.pos.x, d.pos.z, XP.porArqueiro);
+      if (d.cfg === DUENDE_FRACO) soltarXP(castelo, d.pos, XP.porDuende);
+      else if (d.cfg === ARQUEIRO_CASTELO) soltarXP(castelo, d.pos, XP.porArqueiro);
+      else if (d.cfg === DUENDE_MAGICO) soltarXP(castelo, d.pos, XP.porMagico);
+      else if (d.cfg === PRINCESA) derrotouPrincesa(d);
     },
+    aoFerirPrincesa: (d) => mostrarBarraPrincesa(d),
   }));
   duendesCastelo.reiniciar();
 }
@@ -1529,7 +1560,37 @@ function mostrarVilarejo() {
   $('hud-name').textContent = 'Herói';
   entrarNoMapa('vilarejo', vilarejo.inicio);
   mostrarAviso('Bem-vindo ao Vilarejo!');
-  mostrarDica('Fale com o Gnomo Chefe na praça. Os gnomos são pacíficos… se ninguém os provocar.');
+}
+
+/** Solta orbes de XP no mapa (no máximo 6 orbes; o valor é dividido entre eles). */
+function soltarXP(m, pos, total) {
+  const n = Math.min(total, 6);
+  for (let i = 0; i < n; i++) {
+    const valor = Math.floor(total / n) + (i < total % n ? 1 : 0);
+    m.orbes.soltar(pos.x + (Math.random() - 0.5) * 0.6, pos.z + (Math.random() - 0.5) * 0.6, valor);
+  }
+}
+
+// ------------------------------------------------------------------ Princesa Duendete
+function mostrarBarraPrincesa(d) {
+  $('boss-name').textContent = PRINCESA.nome;
+  $('boss-fill').style.width = `${Math.max(0, d.hp / d.hpMax) * 100}%`;
+  $('boss-bar').classList.remove('hidden');
+  hud.classList.add('com-chefao', 'com-princesa');
+}
+
+function derrotouPrincesa(d) {
+  princesaDerrotada = true;
+  soltarXP(castelo, d.pos, XP.porPrincesa);
+  $('boss-fill').style.width = '0%';
+  setTimeout(() => {
+    $('boss-bar').classList.add('hidden');
+    hud.classList.remove('com-chefao', 'com-princesa');
+  }, 1500);
+  // um portal azul-claro aparece e leva de volta à vila dos gnomos
+  const { x, z } = castelo.centroSala;
+  portais.push({ portal: criarPortal(castelo.scene, x, z, 0, { cor: 'azul' }), mapa: castelo, destino: voltarAoVilarejo });
+  tremor = Math.max(tremor, 0.4);
 }
 
 /** Coloca o herói num mapa ('vilarejo' ou 'castelo') no ponto indicado. */
@@ -1547,8 +1608,12 @@ function entrarNoMapa(nome, { x, z, dir }) {
   cam.pitch = 0.38;
   encerrarConversa();
   controles.classList.remove('hidden');
-  $('castle-count').classList.toggle('hidden', nome !== 'castelo');
-  atualizarContadorCastelo();
+  const princesaAtiva = nome === 'castelo' && !princesaDerrotada && duendesCastelo.princesa()?.alerta;
+  $('boss-bar').classList.toggle('hidden', !princesaAtiva);
+  hud.classList.toggle('com-chefao', !!princesaAtiva);
+  hud.classList.toggle('com-princesa', !!princesaAtiva);
+  for (const a of aguas) a.malha.parent?.remove(a.malha);
+  aguas = [];
   atualizarHUDHeroi();
   input.reiniciar();
   tmp.set(x, 1, z);
@@ -1557,10 +1622,6 @@ function entrarNoMapa(nome, { x, z, dir }) {
 
 function mostrarCastelo() {
   entrarNoMapa('castelo', castelo ? castelo.inicio : { x: 0, z: 1.5, dir: Math.PI });
-  if (!casteloLivre) {
-    mostrarAviso('O Castelo dos Duendes');
-    mostrarDica('Derrote todos os duendes. Cuidado com o veneno dos duendes mágicos!');
-  }
 }
 
 function voltarAoVilarejo() {
@@ -1688,11 +1749,6 @@ window.addEventListener('keydown', (e) => {
   if (i >= 0 || j >= 0) escolherMelhoria(i >= 0 ? i : j);
 });
 
-function atualizarContadorCastelo() {
-  if (!duendesCastelo) return;
-  const n = duendesCastelo.restantes();
-  $('castle-count').textContent = n > 0 ? `Duendes restantes: ${n}` : 'Castelo libertado!';
-}
 
 function danoHeroi(dano, origem) {
   const h = heroi;
@@ -1763,13 +1819,60 @@ function atualizarVeneno(dt) {
   }
 }
 
-// ataque do herói: o golpe acerta no meio da animação
-const ATAQUE_HEROI = { recarga: 0.55, duracao: 0.45, acerto: 0.2, alcance: 1.9, arco: Math.PI * 0.7 };
+/**
+ * Ataque do herói conforme o item da mão direita: a espada corta de perto, a vara lança
+ * um jato de água e, sem uma arma (só escudo ou nada), ele dá socos.
+ */
+function ataqueAtual() {
+  const m = heroi.rig.maoD;
+  return m === 'espada' ? ATAQUES_HEROI.espada : m === 'vara' ? ATAQUES_HEROI.vara : ATAQUES_HEROI.soco;
+}
 
-/** Atributo usado no golpe: a vara usa a Inteligência; o resto, o Poder. */
-function ataqueDoHeroi() {
-  const h = heroi;
-  return h.rig.maoD === 'vara' ? h.atributos.inteligencia : h.atributos.poder;
+const geoAgua = new THREE.SphereGeometry(0.2, 14, 10);
+const matAgua = new THREE.MeshStandardMaterial({ color: 0x6ac8ff, emissive: 0x1a6aaa, emissiveIntensity: 0.8, transparent: true, opacity: 0.85, roughness: 0.1 });
+const matBrilhoAgua = new THREE.SpriteMaterial({ map: texturaBrilho('rgba(90,190,255,1)'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.8 });
+
+/** Jato de água da vara: segue reto (com uma leve mira) até acertar alguém. */
+function lancarAgua(atk, alvo) {
+  const malha = new THREE.Mesh(geoAgua, matAgua);
+  const brilho = new THREE.Sprite(matBrilhoAgua);
+  brilho.scale.setScalar(1.1);
+  malha.add(brilho);
+  malha.position.set(heroi.pos.x + Math.sin(heroi.dir) * 0.6, 1.25, heroi.pos.z + Math.cos(heroi.dir) * 0.6);
+  mapa.scene.add(malha);
+  const vel = new THREE.Vector3(Math.sin(heroi.dir), 0, Math.cos(heroi.dir)).multiplyScalar(atk.velocidade);
+  aguas.push({ malha, vel, alvo, vida: atk.alcance / atk.velocidade, ataque: heroi.atributos[atk.atributo] });
+  particulas.emitir(malha.position, 0x8ad8ff, 12, { vel: 2, vida: 0.4 });
+}
+
+function atualizarAguas(dt) {
+  for (let i = aguas.length - 1; i >= 0; i--) {
+    const a = aguas[i];
+    a.vida -= dt;
+    if (a.alvo && !a.alvo.morto) {
+      tmp.set(a.alvo.pos.x, 0.9, a.alvo.pos.z).sub(a.malha.position).normalize().multiplyScalar(a.vel.length());
+      a.vel.lerp(tmp, Math.min(1, dt * 6));
+    }
+    a.malha.position.addScaledVector(a.vel, dt);
+    a.malha.scale.setScalar(1 + Math.sin(a.vida * 30) * 0.12);
+    particulas.emitir(a.malha.position, Math.random() < 0.5 ? 0x6ac8ff : 0xd8f2ff, 2, { vel: 0.8, vida: 0.35, gravidade: 4 });
+    let fim = a.vida <= 0 || (mapa.colide && mapa.colide(a.malha.position.x, a.malha.position.z, 0.1));
+    if (!fim) {
+      for (const alvo of inimigos.alvos()) {
+        tmp2.set(alvo.pos.x, 0.9, alvo.pos.z);
+        if (tmp2.distanceTo(a.malha.position) < 0.75) {
+          inimigos.atingir(alvo, a.ataque, a.malha.position);
+          fim = true;
+          break;
+        }
+      }
+    }
+    if (fim) {
+      particulas.emitir(a.malha.position, 0x8ad8ff, 30, { vel: 4, vida: 0.6, gravidade: 8 });
+      a.malha.parent?.remove(a.malha);
+      aguas.splice(i, 1);
+    }
+  }
 }
 
 function atualizarHeroi(dt, t) {
@@ -1804,39 +1907,60 @@ function atualizarHeroi(dt, t) {
   h.andar += (mag - h.andar) * Math.min(1, dt * 10);
 
   h.recarga -= dt;
+  const atk = ataqueAtual();
   if (!conversa && input.atacando() && h.recarga <= 0 && !atacando) {
-    // mira automática no inimigo mais próximo
-    let alvo = null, melhor = 3;
+    // mira automática no inimigo mais próximo (a água alcança mais longe)
+    let alvo = null, melhor = atk.tipo === 'agua' ? 9 : 3;
     for (const g of inimigos.alvos()) {
       const d = distXZ(g.pos, h.pos);
       if (d < melhor) { melhor = d; alvo = g; }
     }
     if (alvo) h.dir = Math.atan2(alvo.pos.x - h.pos.x, alvo.pos.z - h.pos.z);
+    h.alvo = alvo;
     h.ataqueT = 0;
     h.acertou = false;
-    h.recarga = ATAQUE_HEROI.recarga;
+    h.recarga = atk.recarga;
   }
   if (h.ataqueT >= 0) {
     h.ataqueT += dt;
-    if (!h.acertou && h.ataqueT >= ATAQUE_HEROI.acerto) {
+    if (!h.acertou && h.ataqueT >= atk.acerto) {
       h.acertou = true;
-      if (inimigos.atacar(h.pos, h.dir, ATAQUE_HEROI.alcance, ATAQUE_HEROI.arco, ataqueDoHeroi()) && mapa === castelo) {
-        atualizarContadorCastelo();
-      }
+      if (atk.tipo === 'agua') lancarAgua(atk, h.alvo);
+      else inimigos.atacar(h.pos, h.dir, atk.alcance, atk.arco, h.atributos[atk.atributo]);
     }
-    if (h.ataqueT >= ATAQUE_HEROI.duracao) h.ataqueT = -1;
+    if (h.ataqueT >= atk.duracao) h.ataqueT = -1;
   }
   regenerar(h, dt);
   atualizarVeneno(dt);
   if (!h.vivo) return;
   h.rig.root.rotation.y = h.dir;
-  animarRig(h.rig, dt, t, h.andar, h.ataqueT >= 0 ? h.ataqueT / ATAQUE_HEROI.duracao : -1);
+  animarRig(h.rig, dt, t, h.andar, h.ataqueT >= 0 ? h.ataqueT / atk.duracao : -1);
   h.rig.root.visible = h.invul <= 0 || Math.floor(h.invul * 20) % 2 === 0;
-  $('attack-cd').style.transform = `scaleY(${Math.max(0, h.recarga) / ATAQUE_HEROI.recarga})`;
+  $('attack-cd').style.transform = `scaleY(${Math.max(0, h.recarga) / atk.recarga})`;
 
-  // perto do Gnomo Chefe aparece o botão de conversar
-  const perto = mapa === vilarejo && distXZ(h.pos, povo.chefe.pos) < GNOMO_CHEFE.distanciaConversa;
-  $('talk-btn').classList.toggle('hidden', !perto || !!conversa);
+  // botão de ação: conversar com o Rei Gnomo ou abrir o baú
+  let acao = null;
+  const rei = povo.chefe;
+  if (mapa === vilarejo && !rei.morto && !rei.bravo && distXZ(h.pos, rei.pos) < GNOMO_CHEFE.distanciaConversa) acao = 'conversar';
+  else if (mapa === castelo && !bauAberto && distXZ(h.pos, castelo.bau) < 2.2) acao = 'bau';
+  const botao = $('talk-btn');
+  botao.classList.toggle('hidden', !acao || !!conversa);
+  if (acao && botao.dataset.acao !== acao) {
+    botao.dataset.acao = acao;
+    botao.textContent = acao === 'bau' ? 'Abrir o baú' : `Falar com o ${GNOMO_CHEFE.nome}`;
+  }
+}
+
+/** O baú do labirinto tem um escudo; quem ganhou o escudo de presente acha o Escudo Duendeiro. */
+function abrirBau() {
+  bauAberto = true;
+  castelo.abrirBau();
+  const id = heroi.escolha.item === 'escudo' ? 'escudoDuendeiro' : 'escudo';
+  if (!heroi.inventario.includes(id)) heroi.inventario.push(id);
+  montarPainelAtributos();
+  tmp.set(castelo.bau.x, 1.2, castelo.bau.z);
+  particulas.emitir(tmp, 0xffe08a, 60, { vel: 3.5, vida: 1, subir: 1.5 });
+  mostrarAviso(`Você encontrou: ${item(id).nome}!`);
 }
 
 /** Portais do mapa atual: girar, brilhar e levar o herói quando ele entra. */
@@ -1852,15 +1976,9 @@ function atualizarPortais(dt) {
       return;
     }
   }
-  // castelo livre: abre o portal de volta para a vila
-  if (mapa === castelo && !casteloLivre && duendesCastelo.restantes() === 0) {
-    casteloLivre = true;
-    atualizarContadorCastelo();
-    const { x, z } = castelo.centro;
-    portais.push({ portal: criarPortal(castelo.scene, x, z, 0), mapa: castelo, destino: voltarAoVilarejo });
-    mostrarAviso('Castelo libertado!');
-    mostrarDica('Um portal de volta para a vila se abriu no meio do pátio.');
-  }
+  // a barra da Princesa acompanha a vida dela
+  const pr = duendesCastelo?.princesa();
+  if (mapa === castelo && pr && pr.alerta && !pr.morto) mostrarBarraPrincesa(pr);
 }
 
 // ------------------------------------------------------------------ Conversas
@@ -1947,10 +2065,10 @@ $('dialog-buttons').addEventListener('click', (e) => {
   if (b) avancarConversa(b.dataset.opcao);
 });
 
-// ------------------------------------------------------------------ Conversa com o Gnomo Chefe
+// ------------------------------------------------------------------ Conversa com o Rei Gnomo
 function conversarComChefe() {
   const base = { nome: GNOMO_CHEFE.nome, com: povo.chefe.pos, expressar: povo.expressar };
-  if (casteloLivre) {
+  if (princesaDerrotada) {
     iniciarConversa(CONVERSA_CHEFE_VITORIA, base);
   } else if (missaoAceita) {
     iniciarConversa(CONVERSA_CHEFE_LEMBRETE, base);
@@ -1964,7 +2082,7 @@ function conversarComChefe() {
           // o chefe ri… e acaba com o herói na hora
           continuarConversa(CONVERSA_CHEFE_NAO, () => {
             povo.raioMortal(heroi.pos);
-            derrubarHeroi('O Gnomo Chefe acabou com você!');
+            derrubarHeroi(`O ${GNOMO_CHEFE.nome} acabou com você!`);
           });
         }
       },
@@ -1976,11 +2094,12 @@ function abrirPortalDaVila() {
   missaoAceita = true;
   const { x, z } = POSICAO_PORTAL_VILA;
   portais.push({ portal: criarPortal(vilarejo.scene, x, z, Math.atan2(-x, -z)), mapa: vilarejo, destino: mostrarCastelo });
-  mostrarAviso('Um portal se abriu no fundo da vila!');
-  mostrarDica('O portal verde perto do moinho leva ao castelo dos duendes.');
 }
 
-$('talk-btn').addEventListener('click', conversarComChefe);
+$('talk-btn').addEventListener('click', () => {
+  if ($('talk-btn').dataset.acao === 'bau') abrirBau();
+  else conversarComChefe();
+});
 
 // ------------------------------------------------------------------ Painel de atributos e itens
 const ICONE_PERSONAGEM = `<svg viewBox="0 0 64 64" aria-hidden="true">
@@ -1999,17 +2118,19 @@ function montarPainelAtributos() {
   }).join('');
   const cheio = h.equipados.length >= MAX_EQUIPADOS;
   const itens = h.inventario.map((id) => {
-    const item = PRESENTES.find((p) => p.id === id);
+    const it = item(id);
     const equipado = h.equipados.includes(id);
-    const efeitos = Object.entries(item.bonus)
+    // só cabe um escudo por vez (os dois vão no braço esquerdo)
+    const outroEscudo = it.escudo && h.equipados.some((e) => e !== id && item(e).escudo);
+    const efeitos = Object.entries(it.bonus)
       .map(([k, v]) => `<li class="${v > 0 ? 'bonus-mais' : 'bonus-menos'}">${sinal(v)} ${ATRIBUTOS.find((a) => a.chave === k).nome}</li>`)
       .join('');
     const botao = equipado
       ? `<button class="botao-item remover" data-item="${id}">Remover</button>`
-      : `<button class="botao-item" data-item="${id}" ${cheio ? 'disabled' : ''}>Equipar</button>`;
+      : `<button class="botao-item" data-item="${id}" ${cheio || outroEscudo ? 'disabled' : ''}>Equipar</button>`;
     return `<div class="painel-item${equipado ? ' equipado' : ''}">
         <span class="icone-presente">${iconePresente(id)}</span>
-        <div class="painel-item-info"><b>${item.nome}</b>${equipado ? '<small>Equipado</small>' : ''}<ul>${efeitos}</ul></div>
+        <div class="painel-item-info"><b>${it.nome}</b>${equipado ? '<small>Equipado</small>' : ''}<ul>${efeitos}</ul></div>
         ${botao}
       </div>`;
   }).join('');
@@ -2024,7 +2145,7 @@ function montarPainelAtributos() {
 function alternarItem(id) {
   const h = heroi;
   if (h.equipados.includes(id)) h.equipados = h.equipados.filter((i) => i !== id);
-  else if (h.equipados.length < MAX_EQUIPADOS) h.equipados = [...h.equipados, id];
+  else if (h.equipados.length < MAX_EQUIPADOS && !(item(id).escudo && h.equipados.some((e) => item(e).escudo))) h.equipados = [...h.equipados, id];
   montarRigHeroi(h.pos.x, h.pos.z);
   aplicarAtributos();
   montarPainelAtributos();
@@ -2070,7 +2191,8 @@ function loop() {
     // escolhendo a melhoria de nível: tudo parado
   } else if (estado === 'aventura' || (estado === 'portal' && heroi)) {
     atualizarHeroi(dt, tempo);
-    if (mapa === castelo) orbes.atualizar(dt, heroi);
+    mapa.orbes.atualizar(dt, heroi);
+    atualizarAguas(dt);
     inimigos.atualizar(dt, tempo);
     mapa.atualizar(dt, tempo, heroi.pos, camera);
     atualizarPortais(dt);

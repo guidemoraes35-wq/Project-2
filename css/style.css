@@ -540,7 +540,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .botao-atributos, .painel-atributos { display: none; }
 #hud.modo-vilarejo .hud-stats,
 #hud.modo-vilarejo .hud-duendes,
-#hud.modo-vilarejo .chefao { display: none; }
+#hud.modo-vilarejo:not(.com-princesa) .chefao { display: none; }
 #controls.sem-super #super-btn { display: none; }
 
 /* botão com o ícone do personagem, no canto superior direito */
