@@ -37,6 +37,10 @@
       <span id="boss-name" class="chefao-nome"></span>
       <div class="chefao-barra"><div id="boss-fill"></div></div>
     </div>
+    <div class="hud-vilarejo">
+      <div class="hud-nome">Vilarejo</div>
+      <div class="hud-presente">Presente: <span id="village-gift"></span></div>
+    </div>
     <div id="banner" class="aviso hidden"></div>
     <div id="hint" class="dica hidden">Siga a trilha até o fim. Arraste a tela para girar a câmera.</div>
   </div>
@@ -84,6 +88,23 @@
       <button id="change-btn" class="botao-secundario">Trocar avatar</button>
     </div>
   </div>
+
+  <!-- Criação do personagem (depois do portal) -->
+  <div id="create-screen" class="tela-criacao hidden">
+    <div class="criacao-painel">
+      <div class="criacao-topo">
+        <h1>Crie seu personagem</h1>
+        <ol id="create-steps" class="etapas"></ol>
+      </div>
+      <div id="create-body" class="criacao-corpo"></div>
+      <div class="criacao-botoes">
+        <button id="create-back" class="botao-secundario">Voltar</button>
+        <button id="create-next" class="botao-principal">Próximo</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="fade"></div>
 
   <noscript>Este jogo precisa de JavaScript.</noscript>
   <script type="module" src="src/main.js"></script>

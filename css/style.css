@@ -504,3 +504,167 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .cartas { flex: 1; max-width: none; justify-content: space-between; align-items: center; }
   .card { flex: 0 1 250px; }
 }
+
+/* ---------------------------------------------------------------- Portal */
+#fade {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle at 50% 50%, #f2ffe6 0, #8dff7a 30%, #1c6a24 70%, #06210b 100%);
+  transition: opacity 0.9s ease-in;
+}
+#fade.ativo { opacity: 1; pointer-events: auto; }
+
+/* ---------------------------------------------------------------- Vilarejo */
+.hud-vilarejo { display: none; }
+#hud.modo-vilarejo .hud-jogador,
+#hud.modo-vilarejo .hud-duendes,
+#hud.modo-vilarejo .chefao { display: none; }
+#hud.modo-vilarejo .hud-vilarejo {
+  display: block;
+  position: absolute;
+  top: calc(12px + var(--sat));
+  left: calc(12px + var(--sae));
+  padding: 10px 14px;
+  background: var(--fundo-painel);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+}
+.hud-presente { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--texto-suave); }
+.hud-presente #village-gift { display: flex; align-items: center; gap: 4px; color: var(--texto); font-weight: 700; }
+.hud-presente .icone-presente { width: 22px; height: 22px; }
+#controls.sem-combate #attack-btn,
+#controls.sem-combate #super-btn { display: none; }
+
+/* ---------------------------------------------------------------- Criação do personagem */
+.tela-criacao { position: fixed; inset: 0; pointer-events: none; }
+.criacao-painel {
+  position: absolute;
+  top: calc(16px + var(--sat));
+  right: calc(16px + var(--sad));
+  bottom: calc(16px + var(--sab));
+  width: min(440px, 46vw);
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  background: var(--fundo-painel);
+  border: 1px solid var(--borda);
+  border-radius: 14px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+}
+.criacao-topo h1 {
+  margin: 0;
+  font-family: var(--fonte-titulo);
+  font-size: clamp(22px, 3.2vw, 30px);
+  color: var(--ouro);
+  text-shadow: 0 0 14px rgba(232, 194, 106, 0.3), 0 2px 3px #000;
+}
+.etapas {
+  display: flex;
+  gap: 6px;
+  margin: 10px 0 4px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+.etapas li { flex: 1; display: flex; align-items: center; gap: 6px; padding-top: 6px; border-top: 3px solid rgba(255, 255, 255, 0.12); }
+.etapas li span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.1);
+}
+.etapas li.atual { color: var(--ouro); border-top-color: var(--ouro); }
+.etapas li.atual span { background: var(--ouro); color: #1a1206; }
+.etapas li.feita { color: #9ce07a; border-top-color: #6aa84a; }
+.etapas li.feita span { background: #4a8a34; color: #fff; }
+
+.criacao-corpo { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -6px; padding: 0 6px; }
+.criacao-pergunta { margin: 14px 0 8px; font-family: var(--fonte-titulo); font-size: 17px; font-weight: normal; color: var(--texto); }
+.criacao-nota { margin: 12px 0 0; font-size: 13px; color: var(--texto-suave); text-align: center; }
+
+.opcoes { display: grid; gap: 8px; }
+.opcoes-1 { grid-template-columns: 1fr; }
+.opcoes-2 { grid-template-columns: 1fr 1fr; }
+.opcoes-3 { grid-template-columns: repeat(3, 1fr); }
+.opcao {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 10px 12px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.opcao:hover { background: rgba(255, 255, 255, 0.09); }
+.opcao:focus-visible { outline: 2px solid var(--ouro); outline-offset: 2px; }
+.opcao.selecionada {
+  border-color: var(--ouro);
+  background: rgba(232, 194, 106, 0.12);
+  box-shadow: 0 0 16px rgba(232, 194, 106, 0.25);
+}
+.opcoes-3 .opcao { flex-direction: column; justify-content: center; text-align: center; gap: 6px; padding: 12px 6px; }
+.opcao-nome { font-size: 14px; line-height: 1.25; }
+.opcao-nome small { display: block; font-size: 12px; color: var(--texto-suave); }
+.amostras { display: inline-flex; flex-shrink: 0; }
+.amostras i {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, 0.55);
+  margin-left: -5px;
+}
+.amostras i:first-child { margin-left: 0; }
+.amostra-roupa {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: 2px solid rgba(0, 0, 0, 0.55);
+  background: linear-gradient(135deg, var(--a) 0 58%, var(--b) 58% 72%, var(--a) 72%);
+}
+.icone-presente { display: inline-flex; width: 44px; height: 44px; flex-shrink: 0; }
+.icone-presente svg { width: 100%; height: 100%; }
+
+.criacao-botoes { display: flex; gap: 10px; padding-top: 12px; }
+.criacao-botoes button { margin-top: 0; }
+.criacao-botoes .botao-principal { flex: 1; }
+.criacao-botoes .botao-principal:disabled { opacity: 0.4; filter: grayscale(0.6); cursor: default; }
+.criacao-botoes .invisivel { visibility: hidden; }
+
+/* em pé: o painel ocupa a parte de baixo e o personagem aparece em cima */
+@media (orientation: portrait) {
+  .criacao-painel {
+    top: auto;
+    left: calc(10px + var(--sae));
+    right: calc(10px + var(--sad));
+    bottom: calc(10px + var(--sab));
+    width: auto;
+    height: min(58%, 520px);
+    padding: 12px;
+  }
+  .criacao-pergunta { margin: 10px 0 6px; font-size: 15px; }
+  .opcao { padding: 8px 10px; min-height: 44px; }
+  .opcao-nome { font-size: 13px; }
+}
+/* celular deitado: painel mais estreito e compacto */
+@media (max-height: 500px) and (orientation: landscape) {
+  .criacao-painel { top: calc(8px + var(--sat)); bottom: calc(8px + var(--sab)); width: min(400px, 52vw); padding: 10px 12px; }
+  .criacao-topo h1 { font-size: 20px; }
+  .etapas { margin-top: 6px; }
+  .criacao-pergunta { margin: 8px 0 6px; font-size: 14px; }
+  .opcao { min-height: 40px; padding: 6px 10px; }
+  .icone-presente { width: 34px; height: 34px; }
+}

@@ -1,15 +1,22 @@
 import * as THREE from 'three';
-import { CLASSES, DUENDE, ARQUEIRO, CHEFAO, ATRIBUTOS, REGRAS, NOMES_ATRIBUTO, calcularDano, pontosDeAtaque, vidaPorSegundo } from './config.js';
+import {
+  CLASSES, DUENDE, ARQUEIRO, CHEFAO, ATRIBUTOS, REGRAS, NOMES_ATRIBUTO, calcularDano, pontosDeAtaque, vidaPorSegundo,
+  GENEROS, APARENCIAS, ROUPAS, ROUPA_SIMPLES, PRESENTES, VILAREJO,
+} from './config.js';
 import { Input } from './input.js';
 import { criarMundo, texturaBrilho } from './world.js';
-import { criarAssassino, criarMaga, criarDuende, criarChefao, animarRig, criarContornoTranslucido } from './models.js';
+import { criarAssassino, criarMaga, criarDuende, criarChefao, criarHeroi, descartarRig, animarRig, criarContornoTranslucido } from './models.js';
 import { Particulas, RastroGolpe, NumerosDano } from './effects.js';
+import { criarPortal } from './portal.js';
+import { criarEstudio } from './estudio.js';
+import { criarVilarejo } from './vilarejo.js';
 
 // ------------------------------------------------------------------ Elementos
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
 const telaSelecao = $('select-screen');
 const telaFim = $('end-screen');
+const telaCriacao = $('create-screen');
 const hud = $('hud');
 const controles = $('controls');
 
@@ -21,10 +28,19 @@ renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
 
-const scene = new THREE.Scene();
+const scene = new THREE.Scene(); // a floresta do tutorial
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 420);
 const mundo = criarMundo(scene);
 const particulas = new Particulas(scene);
+const estudio = criarEstudio(); // cenário da criação do personagem
+let vilarejo = null;            // criado na primeira visita
+let cena = scene;               // cena desenhada agora
+
+/** Troca a cena desenhada; as partículas vão junto. */
+function trocarCena(nova) {
+  cena = nova;
+  nova.add(particulas.pontos);
+}
 // luz fraca que acompanha o jogador para que o avatar seja visível no escuro
 const luzJogador = new THREE.PointLight(0x8fa6ff, 5, 9, 1.4);
 scene.add(luzJogador);
@@ -48,7 +64,7 @@ window.addEventListener('resize', redimensionar);
 redimensionar();
 
 // ------------------------------------------------------------------ Estado
-let estado = 'selecao'; // selecao | jogando | fim
+let estado = 'selecao'; // selecao | jogando | fim | portal | criacao | vilarejo
 let classeSelecionada = 'assassino';
 let jogador = null;
 let duendes = [];
@@ -63,6 +79,10 @@ let progresso = 0;     // quantos metros da trilha o jogador já percorreu
 let timerFim = -1;
 let chefao = null;
 let tremor = 0;
+let portal = null;
+let timerPortal = -1;
+let localPortal = null;
+let heroi = null; // personagem definitivo, no vilarejo
 const cam = { yaw: Math.PI * 0.25, pitch: 0.42, dist: 6.5 };
 
 const tmp = new THREE.Vector3();
@@ -154,8 +174,15 @@ function selecionarClasse(id) {
 function mostrarSelecao() {
   estado = 'selecao';
   limparPartida();
+  removerHeroi();
+  removerPrevia();
+  trocarCena(scene);
+  camera.clearViewOffset();
   montarPreview();
   telaFim.classList.add('hidden');
+  telaCriacao.classList.add('hidden');
+  hud.classList.remove('modo-vilarejo');
+  controles.classList.remove('sem-combate');
   hud.classList.add('hidden');
   controles.classList.add('hidden');
   telaSelecao.classList.remove('hidden');
@@ -177,6 +204,9 @@ function limparPartida() {
   bolasDeFogo = [];
   pedras = [];
   if (rastro) rastro.remover(scene);
+  if (portal) portal.remover();
+  portal = null;
+  timerPortal = -1;
   jogador = null;
   chefao = null;
   duendes = [];
@@ -240,6 +270,7 @@ function iniciarJogo(id) {
   hud.classList.remove('hidden');
   controles.classList.remove('hidden');
   const dica = $('hint');
+  dica.textContent = 'Siga a trilha até o fim. Arraste a tela para girar a câmera.';
   dica.classList.remove('hidden', 'some');
   setTimeout(() => dica.classList.add('some'), 4500);
   estado = 'jogando';
@@ -256,15 +287,16 @@ function atualizarHUD() {
   if (chefao) $('boss-fill').style.width = `${Math.max(0, chefao.hp / chefao.hpMax) * 100}%`;
 }
 
-function terminar(vitoria) {
+/** O jogador morreu no tutorial (vencer o chefão abre o portal em vez desta tela). */
+function terminar() {
   estado = 'fim';
   controles.classList.add('hidden');
   input.reiniciar();
-  $('end-title').textContent = vitoria ? 'Vitória!' : 'Você morreu';
-  $('end-title').className = vitoria ? 'vitoria' : 'derrota';
+  $('end-title').textContent = 'Você morreu';
+  $('end-title').className = 'derrota';
   const pct = Math.round(Math.min(1, progresso / mundo.comprimento) * 100);
-  $('end-text').textContent = vitoria
-    ? `O ${CHEFAO.nome} foi derrotado e a floresta está livre! Duendes derrotados pelo caminho: ${mortos}.`
+  $('end-text').textContent = chefao && chefao.morto
+    ? `O ${CHEFAO.nome} foi derrotado, mas você caiu antes de atravessar o portal. Duendes derrotados: ${mortos}.`
     : chefao
       ? `Você chegou ao fim da trilha, mas caiu diante do ${CHEFAO.nome}. Duendes derrotados: ${mortos}.`
       : `Você percorreu ${pct}% da trilha e derrotou ${mortos} duendes antes de cair.`;
@@ -432,7 +464,9 @@ function danoDuende(d, dano, origem, op = {}) {
     if (d === chefao) {
       particulas.emitir(tmp, 0x8cff6a, 90, { vel: 6, vida: 1.6, subir: 2 });
       tremor = 0.5;
-      timerFim = 2.4;
+      // um portal verde se abre onde o chefão caiu
+      timerPortal = 2.0;
+      localPortal = { x: d.pos.x, z: d.pos.z };
       atualizarHUD();
       return;
     }
@@ -914,6 +948,20 @@ function regenerar(ent, dt) {
 }
 
 // ------------------------------------------------------------------ Jogador
+/** Move com o joystick/teclado relativo à câmera. Retorna a intensidade do movimento (0 a 1). */
+function moverPelaCamera(ent, vel, dt, girar = true) {
+  const m = input.movimento();
+  const mag = Math.hypot(m.x, m.y);
+  if (mag <= 0.01) return 0;
+  const sy = Math.sin(cam.yaw), cy = Math.cos(cam.yaw);
+  const mx = cy * m.x - sy * m.y;
+  const mz = -sy * m.x - cy * m.y;
+  ent.pos.x += mx * vel * dt;
+  ent.pos.z += mz * vel * dt;
+  if (girar) ent.dir = girarPara(ent.dir, Math.atan2(mx, mz), dt * 14);
+  return Math.min(1, mag);
+}
+
 function duendeMaisProximo(maxDist, cone = Math.PI) {
   let melhor = null, melhorD = maxDist;
   for (const d of duendes) {
@@ -1049,21 +1097,10 @@ function atualizarJogador(dt, t) {
     return;
   }
 
-  // movimento relativo à câmera
-  const m = estado === 'jogando' ? input.movimento() : { x: 0, y: 0 };
-  const mag = Math.hypot(m.x, m.y);
-  const sy = Math.sin(cam.yaw), cy = Math.cos(cam.yaw);
-  const mx = cy * m.x - sy * m.y;
-  const mz = -sy * m.x - cy * m.y;
   const atacando = j.ataqueT >= 0;
-  if (mag > 0.01) {
-    const vel = j.velocidade * (atacando ? 0.5 : 1);
-    j.pos.x += mx * vel * dt;
-    j.pos.z += mz * vel * dt;
-    if (!atacando) j.dir = girarPara(j.dir, Math.atan2(mx, mz), dt * 14);
-  }
+  const mag = estado === 'jogando' ? moverPelaCamera(j, j.velocidade * (atacando ? 0.5 : 1), dt, !atacando) : 0;
   mundo.resolverColisao(j.pos, j.raio);
-  j.andar += (Math.min(1, mag) - j.andar) * Math.min(1, dt * 10);
+  j.andar += (mag - j.andar) * Math.min(1, dt * 10);
 
   // ataque
   if (estado === 'jogando' && input.atacando() && j.recarga <= 0 && !atacando) iniciarAtaque();
@@ -1105,12 +1142,17 @@ function atualizarCamera(dt, t) {
     camera.lookAt(alvoCam);
     return;
   }
+  if (estado === 'criacao') {
+    cameraCriacao(dt);
+    return;
+  }
 
   const olhar = input.consumirOlhar(dt);
   cam.yaw -= olhar.dx * 0.006;
   cam.pitch = THREE.MathUtils.clamp(cam.pitch + olhar.dy * 0.004, 0.08, 1.2);
 
-  alvoCam.set(jogador.pos.x, 1.3, jogador.pos.z);
+  const foco = estado === 'vilarejo' ? heroi.pos : jogador.pos;
+  alvoCam.set(foco.x, 1.3, foco.z);
   const cp = Math.cos(cam.pitch);
   camera.position.set(
     alvoCam.x + Math.sin(cam.yaw) * cp * cam.dist,
@@ -1124,6 +1166,307 @@ function atualizarCamera(dt, t) {
     camera.position.y += (Math.random() - 0.5) * f;
   }
   camera.lookAt(alvoCam);
+}
+
+// ------------------------------------------------------------------ Portal
+function abrirPortal() {
+  const { x, z } = localPortal;
+  // de frente para o jogador
+  portal = criarPortal(scene, x, z, Math.atan2(jogador.pos.x - x, jogador.pos.z - z));
+  tmp.set(x, 1.5, z);
+  particulas.emitir(tmp, 0x7dff6a, 90, { vel: 7, vida: 1.2, subir: 1 });
+  tremor = Math.max(tremor, 0.4);
+  mostrarAviso('Um portal se abriu! Atravesse-o.');
+}
+
+function atualizarPortal(dt) {
+  if (timerPortal > 0) {
+    timerPortal -= dt;
+    if (timerPortal <= 0) abrirPortal();
+  }
+  if (!portal) return;
+  portal.atualizar(dt, particulas);
+  if (estado === 'jogando' && jogador.vivo && portal.abertura >= 1 && distXZ(jogador.pos, portal) < 1.1) {
+    entrarNoPortal();
+  }
+  if (estado === 'portal') {
+    // o portal puxa o jogador para dentro
+    const k = Math.min(1, dt * 4);
+    jogador.pos.x += (portal.x - jogador.pos.x) * k;
+    jogador.pos.z += (portal.z - jogador.pos.z) * k;
+    jogador.rig.root.scale.multiplyScalar(Math.exp(-dt * 2.5));
+  }
+}
+
+function entrarNoPortal() {
+  estado = 'portal';
+  jogador.invul = Infinity;
+  controles.classList.add('hidden');
+  hud.classList.add('hidden');
+  input.reiniciar();
+  tmp.copy(jogador.pos).setY(1.2);
+  particulas.emitir(tmp, 0xd8ffb0, 60, { vel: 5, vida: 0.9, subir: 1 });
+  transicao(mostrarCriacao);
+}
+
+/** Escurece a tela com um clarão verde, executa `meio` e clareia de novo. */
+function transicao(meio) {
+  const fade = $('fade');
+  fade.classList.add('ativo');
+  setTimeout(() => {
+    meio();
+    setTimeout(() => fade.classList.remove('ativo'), 150);
+  }, 950);
+}
+
+// ------------------------------------------------------------------ Criação do personagem
+const ETAPAS = ['Aparência', 'Roupa', 'Presente'];
+let etapa = 0;
+let escolha = { genero: null, aparencia: null, roupa: null, item: null };
+let previa = null;
+const giro = { angulo: 0.3, vel: 0 };
+const hex = (c) => `#${c.toString(16).padStart(6, '0')}`;
+
+/** Ícones dos presentes (o escudo é pintado com a cor da roupa escolhida). */
+function iconePresente(id) {
+  if (id === 'espada') {
+    return `<svg viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M47 6 L58 6 L58 17 L27 48 L16 37 Z" fill="#e2e8f2" stroke="#5a6478" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M53 11 L24 40" stroke="#9aa6b8" stroke-width="2"/>
+      <path d="M11 33 L31 53" stroke="#d9a93e" stroke-width="6" stroke-linecap="round"/>
+      <path d="M19 45 L10 54" stroke="#6b4423" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="8" cy="56" r="4.5" fill="#d9a93e"/></svg>`;
+  }
+  if (id === 'vara') {
+    return `<svg viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M9 57 L55 7" stroke="#7a5230" stroke-width="6" stroke-linecap="round"/>
+      <path d="M26 38.5 L33.5 30.5" stroke="#5a3a20" stroke-width="9"/>
+      <path d="M50.5 12 L56 6" stroke="#c8d2e0" stroke-width="7"/>
+      <path d="M8 58 L12 54" stroke="#c8d2e0" stroke-width="7"/>
+      <circle cx="18" cy="47" r="2.8" fill="#5a3a20"/><circle cx="43" cy="20" r="2.8" fill="#5a3a20"/></svg>`;
+  }
+  const cor = escolha.roupa ? hex(escolha.roupa.principal) : '#8a5a30';
+  const faixa = escolha.roupa ? hex(escolha.roupa.detalhe) : '#c8b48a';
+  return `<svg viewBox="0 0 64 64" aria-hidden="true">
+    <clipPath id="disco-escudo"><circle cx="32" cy="32" r="24"/></clipPath>
+    <circle cx="32" cy="32" r="24" fill="${cor}"/>
+    <rect x="27" y="6" width="10" height="52" fill="${faixa}" clip-path="url(#disco-escudo)"/>
+    <circle cx="32" cy="32" r="25" fill="none" stroke="#9aa6b8" stroke-width="4"/>
+    <circle cx="32" cy="32" r="7" fill="#c8d2e0" stroke="#5a6478" stroke-width="1.5"/></svg>`;
+}
+
+function mostrarCriacao() {
+  limparPartida();
+  removerPreview();
+  estado = 'criacao';
+  etapa = 0;
+  escolha = { genero: null, aparencia: null, roupa: null, item: null };
+  giro.angulo = 0.3;
+  giro.vel = 0;
+  trocarCena(estudio.scene);
+  hud.classList.add('hidden');
+  controles.classList.add('hidden');
+  telaFim.classList.add('hidden');
+  telaSelecao.classList.add('hidden');
+  telaCriacao.classList.remove('hidden');
+  montarEtapa();
+  atualizarModeloPrevia();
+  camera.position.set(0, 1.5, 6);
+}
+
+/** Opções obrigatórias de cada etapa. */
+function etapaCompleta() {
+  if (etapa === 0) return !!(escolha.genero && escolha.aparencia);
+  if (etapa === 1) return !!escolha.roupa;
+  return !!escolha.item;
+}
+
+function botaoOpcao(campo, valor, selecionada, conteudo) {
+  return `<button class="opcao${selecionada ? ' selecionada' : ''}" data-campo="${campo}" data-valor="${valor}" aria-pressed="${selecionada}">${conteudo}</button>`;
+}
+
+function montarEtapa() {
+  const corpo = $('create-body');
+  const rolagem = corpo.scrollTop;
+  const menina = escolha.genero === 'menina';
+  let html = '';
+  if (etapa === 0) {
+    html += '<h2 class="criacao-pergunta">Menino ou menina?</h2><div class="opcoes opcoes-2">';
+    for (const g of GENEROS) {
+      html += botaoOpcao('genero', g.id, escolha.genero === g.id, `<span class="opcao-nome">${g.nome}</span>`);
+    }
+    html += '</div><h2 class="criacao-pergunta">Aparência</h2><div class="opcoes opcoes-2">';
+    for (const a of APARENCIAS) {
+      const nome = escolha.genero ? a.nome[menina ? 1 : 0] : a.nome[0].replace(/^(\S+?)o\b/, '$1o(a)');
+      html += botaoOpcao('aparencia', a.id, escolha.aparencia === a, `
+        <span class="amostras" aria-hidden="true">
+          <i style="background:${hex(a.pele)}" title="Pele"></i><i style="background:${hex(a.cabelo)}" title="Cabelo"></i><i style="background:${hex(a.olhos)}" title="Olhos"></i>
+        </span><span class="opcao-nome">${nome}</span>`);
+    }
+    html += '</div>';
+  } else if (etapa === 1) {
+    html += '<h2 class="criacao-pergunta">Escolha a roupa</h2><div class="opcoes opcoes-1">';
+    for (const r of ROUPAS) {
+      html += botaoOpcao('roupa', r.id, escolha.roupa === r, `
+        <span class="amostra-roupa" style="--a:${hex(r.principal)};--b:${hex(r.detalhe)}" aria-hidden="true"></span>
+        <span class="opcao-nome">${r.nome} <small>com ${r.detalhes}</small></span>`);
+    }
+    html += '</div>';
+  } else {
+    html += '<h2 class="criacao-pergunta">Escolha um presente</h2><div class="opcoes opcoes-3">';
+    for (const p of PRESENTES) {
+      html += botaoOpcao('item', p.id, escolha.item === p.id, `
+        <span class="icone-presente">${iconePresente(p.id)}</span>
+        <span class="opcao-nome">${p.nome}</span>`);
+    }
+    html += '</div><p class="criacao-nota">A função de cada presente será revelada em breve.</p>';
+  }
+  corpo.innerHTML = html;
+  corpo.scrollTop = rolagem;
+
+  $('create-steps').innerHTML = ETAPAS.map((nome, i) =>
+    `<li class="${i === etapa ? 'atual' : i < etapa ? 'feita' : ''}"><span>${i < etapa ? '✓' : i + 1}</span>${nome}</li>`).join('');
+  $('create-back').classList.toggle('invisivel', etapa === 0);
+  const prox = $('create-next');
+  prox.textContent = etapa < ETAPAS.length - 1 ? 'Próximo' : 'Entrar no Vilarejo';
+  prox.disabled = !etapaCompleta();
+}
+
+function escolher(campo, valor) {
+  if (campo === 'genero') escolha.genero = valor;
+  else if (campo === 'aparencia') escolha.aparencia = APARENCIAS.find((a) => a.id === valor);
+  else if (campo === 'roupa') escolha.roupa = ROUPAS.find((r) => r.id === valor);
+  else if (campo === 'item') escolha.item = valor;
+  montarEtapa();
+  atualizarModeloPrevia();
+  tmp.set(0, estudio.alturaPedestal + 1.1, 0);
+  particulas.emitir(tmp, 0x9dff8a, 40, { vel: 2.5, vida: 0.8, subir: 0.6 });
+}
+
+$('create-body').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-campo]');
+  if (b) escolher(b.dataset.campo, b.dataset.valor);
+});
+$('create-back').addEventListener('click', () => {
+  if (etapa === 0) return;
+  etapa--;
+  montarEtapa();
+});
+$('create-next').addEventListener('click', () => {
+  if (!etapaCompleta()) return;
+  if (etapa < ETAPAS.length - 1) {
+    etapa++;
+    $('create-body').scrollTop = 0;
+    montarEtapa();
+  } else {
+    $('create-next').disabled = true;
+    transicao(mostrarVilarejo);
+  }
+});
+
+/** Prévia no pedestal: até a escolha, usa um menino de roupa de linho. */
+function atualizarModeloPrevia() {
+  removerPrevia();
+  previa = criarHeroi({
+    genero: escolha.genero || 'menino',
+    aparencia: escolha.aparencia || APARENCIAS[4],
+    roupa: escolha.roupa || ROUPA_SIMPLES,
+    item: escolha.item,
+  });
+  previa.root.position.y = estudio.alturaPedestal;
+  previa.root.rotation.y = giro.angulo;
+  estudio.scene.add(previa.root);
+}
+
+function removerPrevia() {
+  if (!previa) return;
+  estudio.scene.remove(previa.root);
+  descartarRig(previa);
+  previa = null;
+}
+
+function atualizarPrevia(dt, t) {
+  // arrastar gira o personagem; solto, ele volta devagar a olhar para a câmera
+  const olhar = input.consumirOlhar(dt);
+  if (olhar.dx) giro.vel = olhar.dx * 0.012 / Math.max(dt, 1 / 120);
+  giro.angulo += giro.vel * dt;
+  giro.vel *= Math.exp(-dt * 6);
+  if (Math.abs(giro.vel) < 0.2) giro.angulo += difAngulo(giro.angulo, 0.3 + Math.sin(t * 0.6) * 0.25) * Math.min(1, dt * 1.5);
+  if (!previa) return;
+  previa.root.rotation.y = giro.angulo;
+  animarRig(previa, dt, t, 0);
+}
+
+/** A câmera enquadra o pedestal na parte da tela que o painel não cobre. */
+function cameraCriacao(dt) {
+  const w = window.innerWidth, h = window.innerHeight;
+  const painel = document.querySelector('.criacao-painel').getBoundingClientRect();
+  const empe = w < h;
+  // em pé o painel fica embaixo; deitado, à direita
+  const livreX = empe ? w : Math.max(w * 0.4, painel.left);
+  const livreY = empe ? Math.max(h * 0.35, painel.top) : h;
+  camera.setViewOffset(w, h, (w - livreX) / 2, (h - livreY) / 2, w, h);
+  const fracao = livreY / h;
+  const dist = THREE.MathUtils.clamp(3.2 / (0.8 * fracao * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))), 4, 11);
+  camera.position.lerp(tmp.set(0, 1.75, dist), Math.min(1, dt * 4));
+  camera.lookAt(0, 1.2, 0);
+}
+
+// ------------------------------------------------------------------ Vilarejo
+function mostrarVilarejo() {
+  if (!vilarejo) vilarejo = criarVilarejo();
+  removerPrevia();
+  removerHeroi();
+  camera.clearViewOffset();
+  const rig = criarHeroi(escolha);
+  const { x, z, dir } = vilarejo.inicio;
+  rig.root.position.set(x, 0, z);
+  rig.root.rotation.y = dir;
+  vilarejo.scene.add(rig.root);
+  heroi = {
+    rig,
+    escolha: { ...escolha },
+    pos: rig.root.position,
+    dir,
+    andar: 0,
+    velocidade: VILAREJO.velocidade * REGRAS.escalaVelocidade,
+    raio: 0.4,
+  };
+  trocarCena(vilarejo.scene);
+  estado = 'vilarejo';
+  cam.yaw = 0;
+  cam.pitch = 0.38;
+  telaCriacao.classList.add('hidden');
+  hud.classList.add('modo-vilarejo');
+  hud.classList.remove('hidden', 'com-chefao');
+  controles.classList.add('sem-combate');
+  controles.classList.remove('hidden');
+  input.reiniciar();
+  const presente = PRESENTES.find((p) => p.id === escolha.item);
+  $('village-gift').innerHTML = `<span class="icone-presente">${iconePresente(escolha.item)}</span>${presente.nome}`;
+  mostrarAviso('Bem-vindo ao Vilarejo!');
+  const dica = $('hint');
+  dica.textContent = 'Aqui não há inimigos. Explore à vontade!';
+  dica.classList.remove('hidden', 'some');
+  setTimeout(() => dica.classList.add('some'), 4500);
+  tmp.set(x, 1, z);
+  particulas.emitir(tmp, 0x9dff8a, 70, { vel: 4, vida: 1, subir: 1 });
+}
+
+function removerHeroi() {
+  if (!heroi) return;
+  heroi.rig.root.parent?.remove(heroi.rig.root);
+  descartarRig(heroi.rig);
+  heroi = null;
+}
+
+function atualizarHeroi(dt, t) {
+  const h = heroi;
+  const mag = moverPelaCamera(h, h.velocidade, dt);
+  vilarejo.resolverColisao(h.pos, h.raio);
+  h.andar += (mag - h.andar) * Math.min(1, dt * 10);
+  h.rig.root.rotation.y = h.dir;
+  animarRig(h.rig, dt, t, h.andar);
 }
 
 // ------------------------------------------------------------------ Loop
@@ -1148,6 +1491,12 @@ function loop() {
     }
     mundo.atualizar(dt, tempo, tmp2.set(0, 0, 0), camera);
     luzJogador.position.set(0, 3, 2.5);
+  } else if (estado === 'criacao') {
+    atualizarPrevia(dt, tempo);
+    estudio.atualizar(dt, tempo);
+  } else if (estado === 'vilarejo') {
+    atualizarHeroi(dt, tempo);
+    vilarejo.atualizar(dt, tempo, heroi.pos, camera);
   } else if (jogador) {
     atualizarJogador(dt, tempo);
     atualizarDuendes(dt, tempo);
@@ -1160,14 +1509,15 @@ function loop() {
     luzJogador.position.set(jogador.pos.x, 3, jogador.pos.z);
     if (timerFim > 0 && estado === 'jogando') {
       timerFim -= dt;
-      if (timerFim <= 0) terminar(jogador.vivo);
+      if (timerFim <= 0) terminar();
     }
+    atualizarPortal(dt);
   }
 
   atualizarCamera(dt, tempo);
   particulas.atualizar(dt);
   numeros.atualizar(dt);
-  renderer.render(scene, camera);
+  renderer.render(cena, camera);
 }
 
 // ------------------------------------------------------------------ Tela inicial

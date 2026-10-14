@@ -5,7 +5,19 @@ O jogador escolhe um avatar — **Assassino** ou **Maga** — e entra numa dunge
 uma trilha sinuosa por uma floresta escura, iluminada apenas pela lua e por lamparinas,
 e cercada por um rio que não pode ser atravessado. Quanto mais se avança pela trilha,
 mais duendes aparecem. No fim dela, numa clareira com pedras antigas, espera o
-**Chefão Duende**: derrotá-lo vence o jogo.
+**Chefão Duende**. Tudo isso é o tutorial.
+
+## Depois do tutorial
+
+1. **Portal:** quando o Chefão Duende morre, um portal verde se abre onde ele caiu.
+   Atravessar o portal leva à criação do personagem.
+2. **Criação do personagem definitivo**, em três etapas (com prévia 3D num pedestal; arraste para girar):
+   - **Aparência:** menino ou menina, e loiro(a) de olhos azuis, asiático(a) oriental, indiano(a),
+     africano(a), branco(a) de cabelo castanho e olhos verdes ou branco(a) de cabelo preto e olhos castanhos.
+   - **Roupa:** vermelha com detalhes marrons, azul com detalhes brancos ou verde com detalhes pretos.
+   - **Presente:** espada, vara ou escudo (a função de cada um será definida depois).
+3. **Vilarejo:** o personagem aparece num vilarejo de dia, sem inimigos — praça com poço,
+   casas, feira, horta, moinho e floresta em volta.
 
 ## Como jogar
 
@@ -96,9 +108,12 @@ Todos os valores ficam em `src/config.js`.
 ```
 index.html        HUD, controles e telas
 css/style.css     estilos (responsivo: celular em pé/deitado e computador)
-src/config.js     atributos, regras e fórmula de dano
-src/main.js       loop do jogo, jogador, duendes, combate, câmera, telas
+src/config.js     atributos, regras, fórmula de dano e opções da criação do personagem
+src/main.js       loop do jogo, jogador, duendes, combate, câmera, telas, portal, criação e vilarejo
 src/world.js      trilha, rio, floresta, lamparinas, clareira final, lua, colisões
+src/portal.js     portal verde que se abre quando o chefão morre
+src/estudio.js    cenário da criação do personagem (pedestal mágico)
+src/vilarejo.js   vilarejo: casas, praça, poço, feira, horta, moinho e colisões
 src/natureza.js   pinheiros, carvalhos, pedras, arbustos, grama ao vento, lamparinas e braseiros
 src/models.js     modelos cartoon (sombreado toon + contorno, joelhos e cotovelos articulados) e animações
 src/effects.js    partículas, rastro de golpe e números de dano

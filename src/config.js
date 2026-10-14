@@ -174,3 +174,42 @@ export const NOMES_ATRIBUTO = { poder: 'Poder', inteligencia: 'Inteligência' };
 export function pontosDeAtaque(personagem, atributo) {
   return personagem[atributo];
 }
+
+// ------------------------------------------------------------------ Criação do personagem
+// Depois do tutorial, o jogador atravessa o portal e monta o personagem definitivo.
+
+export const GENEROS = [
+  { id: 'menino', nome: 'Menino' },
+  { id: 'menina', nome: 'Menina' },
+];
+
+/** Aparências: cor da pele, do cabelo e dos olhos. `nome` = [menino, menina]. */
+export const APARENCIAS = [
+  { id: 'loiro', nome: ['Loiro de olhos azuis', 'Loira de olhos azuis'], pele: 0xf7d3b8, cabelo: 0xf0cc62, olhos: 0x3d8de0 },
+  { id: 'asiatico', nome: ['Asiático oriental', 'Asiática oriental'], pele: 0xf0cfa6, cabelo: 0x1c1816, olhos: 0x3a2414, olhosPuxados: true },
+  { id: 'indiano', nome: ['Indiano', 'Indiana'], pele: 0xc28a5c, cabelo: 0x17110e, olhos: 0x2e1c10 },
+  { id: 'africano', nome: ['Africano', 'Africana'], pele: 0x7a4b2d, cabelo: 0x17110c, olhos: 0x2a170b, cacheado: true },
+  { id: 'castanho', nome: ['Branco de cabelo castanho e olhos verdes', 'Branca de cabelo castanho e olhos verdes'], pele: 0xf4cba8, cabelo: 0x6e4020, olhos: 0x3f9a4c },
+  { id: 'moreno', nome: ['Branco de cabelo preto e olhos castanhos', 'Branca de cabelo preto e olhos castanhos'], pele: 0xf0c6a2, cabelo: 0x1d1714, olhos: 0x5c3418 },
+];
+
+/** Roupas: cor principal e cor dos detalhes (gola, cinto, barras e punhos). */
+export const ROUPAS = [
+  { id: 'vermelha', nome: 'Vermelha', detalhes: 'detalhes marrons', principal: 0xb8262b, detalhe: 0x6e4524, calca: 0x4a2a1a, bota: 0x3e2716 },
+  { id: 'azul', nome: 'Azul', detalhes: 'detalhes brancos', principal: 0x2c5cc0, detalhe: 0xf3f0e8, calca: 0x22305a, bota: 0x2c2a33 },
+  { id: 'verde', nome: 'Verde', detalhes: 'detalhes pretos', principal: 0x2f8d3c, detalhe: 0x18181c, calca: 0x1f3322, bota: 0x16161a },
+];
+
+/** Roupa de linho usada na prévia antes de o jogador escolher a dele. */
+export const ROUPA_SIMPLES = { id: 'linho', principal: 0xcdbf9f, detalhe: 0x8a7656, calca: 0x6e6250, bota: 0x4a3a28 };
+
+/** Item de presente. A função de cada um será definida depois. */
+export const PRESENTES = [
+  { id: 'espada', nome: 'Espada' },
+  { id: 'vara', nome: 'Vara' },
+  { id: 'escudo', nome: 'Escudo' },
+];
+
+export const VILAREJO = {
+  velocidade: 26, // atributo de velocidade do herói no vilarejo (× escalaVelocidade)
+};
