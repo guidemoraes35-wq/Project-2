@@ -109,6 +109,7 @@ export function criarDuendesCastelo(ctx) {
       d.barra.visible = false;
       derrotados++;
       particulas.emitir(tmp, 0x8cff6a, 25, { vel: 3, vida: 0.9, subir: 1 });
+      ctx.aoMorrer?.(d);
     }
   }
 

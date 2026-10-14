@@ -307,3 +307,24 @@ export const DUENDE_MAGICO = {
   veneno: { dano: 1, duracao: 3 },
   raio: 0.34, escala: 0.85, alturaAcerto: 0.6,
 };
+
+// ------------------------------------------------------------------ Experiência e níveis
+export const XP = {
+  porDuende: 5,        // XP do orbe de um duende fraco
+  porArqueiro: 8,      // XP do orbe de um duende arqueiro
+  nivelMaximo: 10,
+  raioIma: 3,          // o orbe voa até o herói a esta distância
+  raioColeta: 0.7,
+};
+
+/** XP necessário para passar do nível `n` para o seguinte: 15 + 5N. */
+export const xpParaSubir = (n) => 15 + 5 * n;
+
+/** Escolhas ao subir de nível. */
+export const MELHORIAS = [
+  { letra: 'A', atributo: 'vida', valor: 5, nome: 'Vida' },
+  { letra: 'B', atributo: 'poder', valor: 2, nome: 'Ataque' },
+  { letra: 'C', atributo: 'velocidade', valor: 2, nome: 'Velocidade' },
+  { letra: 'D', atributo: 'defesa', valor: 3, nome: 'Defesa' },
+  { letra: 'E', atributo: 'inteligencia', valor: 2, nome: 'Inteligência' },
+];

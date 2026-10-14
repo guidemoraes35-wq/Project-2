@@ -60,6 +60,24 @@ derrotando todos, abre-se um portal de volta para a vila. Se o herói cair, volt
 | Duende arqueiro (flechas) | 20 | 8 | 15 | 0 | 0 | 8 |
 | Duende mágico (veneno) | 5 | 5 | 30 | 5 | 20 | 6 |
 
+### Experiência e níveis
+
+Duendes fracos e arqueiros deixam cair **XP**: uma molécula vermelha brilhante que voa até o herói
+quando ele chega perto (duende fraco 5 XP, arqueiro 8 XP). O herói começa no **nível 1** e sobe de
+nível ao juntar **15 + 5N** de XP (N = nível atual), até o **nível 10**. A cada nível o jogo pausa
+e o jogador escolhe uma melhoria:
+
+| | Melhoria |
+| --- | --- |
+| A | Vida +5 |
+| B | Ataque (Poder) +2 |
+| C | Velocidade +2 |
+| D | Defesa +3 |
+| E | Inteligência +2 |
+
+No computador também dá para escolher com as teclas A a E. O nível e o XP aparecem embaixo da
+barra de vida e no painel do personagem.
+
 O **veneno** do duende mágico não causa dano no contato: tira 1 de vida por segundo durante 3 s
 (a barra de vida fica verde enquanto isso).
 
@@ -174,6 +192,7 @@ src/gnomos.js     gnomos do vilarejo: passeio, raiva, espada, magia de terra e o
 src/conversas.js  falas das conversas
 src/castelo.js    castelo dos duendes: muralhas, torres, fortaleza, pátio e colisões
 src/duendesCastelo.js  duendes do castelo: fracos, arqueiros e mágicos (veneno)
+src/xp.js         orbes de XP que os duendes deixam cair
 src/natureza.js   pinheiros, carvalhos, pedras, arbustos, grama ao vento, lamparinas e braseiros
 src/models.js     modelos cartoon (sombreado toon + contorno, joelhos e cotovelos articulados) e animações
 src/effects.js    partículas, rastro de golpe e números de dano

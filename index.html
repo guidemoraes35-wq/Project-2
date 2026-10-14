@@ -25,6 +25,7 @@
         <div id="hp-fill" class="preenchimento"></div>
         <span id="hp-text"></span>
       </div>
+      <div class="barra-xp"><div id="xp-fill"></div><span id="xp-text"></span></div>
       <div id="hud-stats" class="hud-stats"></div>
     </div>
     <div class="hud-duendes">
@@ -112,6 +113,16 @@
         <button id="create-back" class="botao-secundario">Voltar</button>
         <button id="create-next" class="botao-principal">Próximo</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Subiu de nível: o jogo pausa até o jogador escolher -->
+  <div id="levelup" class="tela-nivel hidden" role="dialog" aria-label="Subiu de nível">
+    <div class="nivel-caixa">
+      <p class="nivel-topo">Você subiu de nível</p>
+      <h2 id="levelup-title"></h2>
+      <p class="nivel-pergunta">Escolha uma melhoria:</p>
+      <div id="levelup-options" class="melhorias"></div>
     </div>
   </div>
 

@@ -13,6 +13,8 @@ import { criarVilarejo } from './vilarejo.js';
 import { criarPovoGnomo } from './gnomos.js';
 import { criarCastelo } from './castelo.js';
 import { criarDuendesCastelo } from './duendesCastelo.js';
+import { criarOrbes } from './xp.js';
+import { XP, xpParaSubir, MELHORIAS, DUENDE_FRACO, ARQUEIRO_CASTELO } from './config.js';
 import { CONVERSA_CHEFE, CONVERSA_CHEFE_SIM, CONVERSA_CHEFE_NAO, CONVERSA_CHEFE_LEMBRETE, CONVERSA_CHEFE_VITORIA } from './conversas.js';
 
 // ------------------------------------------------------------------ Elementos
@@ -1445,6 +1447,9 @@ let inimigos = null;         // personagens do mapa atual (gnomos ou duendes)
 let portais = [];            // { portal, mapa, destino }
 let missaoAceita = false;    // o herói aceitou ajudar os gnomos
 let casteloLivre = false;    // todos os duendes do castelo foram derrotados
+let orbes = null;            // orbes de XP do castelo
+let pausado = false;         // o jogo para enquanto o jogador escolhe a melhoria de nível
+let niveisPendentes = 0;     // níveis ganhos que ainda esperam uma escolha
 
 const POSICAO_PORTAL_VILA = { x: -3, z: -29 }; // no fundo da vila, perto do moinho
 
@@ -1473,7 +1478,15 @@ function prepararVilarejo() {
 function prepararCastelo() {
   if (castelo) return;
   castelo = criarCastelo();
-  duendesCastelo = criarDuendesCastelo(contexto(castelo.scene, { mapa: castelo }));
+  orbes = criarOrbes({ scene: castelo.scene, particulas, coletar: ganharXP });
+  duendesCastelo = criarDuendesCastelo(contexto(castelo.scene, {
+    mapa: castelo,
+    // duendes fracos e arqueiros deixam cair XP
+    aoMorrer(d) {
+      if (d.cfg === DUENDE_FRACO) orbes.soltar(d.pos.x, d.pos.z, XP.porDuende);
+      else if (d.cfg === ARQUEIRO_CASTELO) orbes.soltar(d.pos.x, d.pos.z, XP.porArqueiro);
+    },
+  }));
   duendesCastelo.reiniciar();
 }
 
@@ -1501,6 +1514,9 @@ function mostrarVilarejo() {
     semDano: 0,
     regenT: 0,
     veneno: null,
+    nivel: 1,
+    xp: 0,
+    bonusNivel: {}, // pontos ganhos ao subir de nível
   };
   aplicarAtributos();
   heroi.hp = heroi.hpMax;
@@ -1577,6 +1593,7 @@ function montarRigHeroi(x, z) {
 function aplicarAtributos() {
   const antes = heroi.hpMax || 0;
   heroi.atributos = atributosHeroi(heroi.equipados);
+  for (const [k, v] of Object.entries(heroi.bonusNivel)) heroi.atributos[k] += v;
   heroi.hpMax = heroi.atributos.vida;
   heroi.velocidade = heroi.atributos.velocidade * REGRAS.escalaVelocidade;
   if (heroi.hp !== undefined) heroi.hp = Math.max(1, Math.min(heroi.hpMax, heroi.hp + Math.max(0, heroi.hpMax - antes)));
@@ -1596,7 +1613,80 @@ function atualizarHUDHeroi() {
   $('hp-fill').classList.toggle('baixa', f <= 0.3);
   $('hp-fill').classList.toggle('envenenado', !!heroi.veneno);
   $('hp-text').textContent = `${Math.max(0, Math.ceil(heroi.hp))} / ${heroi.hpMax}`;
+  const max = heroi.nivel >= XP.nivelMaximo;
+  const precisa = xpParaSubir(heroi.nivel);
+  $('hud-name').textContent = `Herói · Nível ${heroi.nivel}`;
+  $('xp-fill').style.width = `${max ? 100 : (heroi.xp / precisa) * 100}%`;
+  $('xp-text').textContent = max ? 'XP MÁX' : `XP ${heroi.xp} / ${precisa}`;
 }
+
+// ------------------------------------------------------------------ Experiência e níveis
+/** Recebe XP de um orbe; ao completar a barra, sobe de nível (até o 10). */
+function ganharXP(valor, pos) {
+  const h = heroi;
+  if (h.nivel >= XP.nivelMaximo) return;
+  h.xp += valor;
+  tmp.copy(pos).setY(1.8);
+  numeros.mostrar(tmp, `+${valor} XP`, 'xp');
+  while (h.nivel < XP.nivelMaximo && h.xp >= xpParaSubir(h.nivel)) {
+    h.xp -= xpParaSubir(h.nivel);
+    h.nivel++;
+    niveisPendentes++;
+  }
+  if (h.nivel >= XP.nivelMaximo) h.xp = 0;
+  atualizarHUDHeroi();
+  if (niveisPendentes > 0 && !pausado) abrirEscolhaNivel();
+}
+
+/** Pausa o jogo e mostra as cinco melhorias. */
+function abrirEscolhaNivel() {
+  pausado = true;
+  controles.classList.add('hidden');
+  $('stats-panel').classList.add('hidden');
+  input.reiniciar();
+  const nivel = heroi.nivel - niveisPendentes + 1;
+  $('levelup-title').textContent = `Nível ${nivel}!`;
+  $('levelup-options').innerHTML = MELHORIAS.map((m, i) => `
+    <button class="melhoria" data-melhoria="${i}">
+      <span class="melhoria-letra">${m.letra}</span>
+      <span class="melhoria-nome">${m.nome}</span>
+      <span class="melhoria-valor">+${m.valor}</span>
+      <span class="melhoria-atual">${heroi.atributos[m.atributo]} → ${heroi.atributos[m.atributo] + m.valor}</span>
+    </button>`).join('');
+  $('levelup').classList.remove('hidden');
+  tmp.copy(heroi.pos).setY(1);
+  particulas.emitir(tmp, 0xffd23a, 60, { vel: 4, vida: 1, subir: 2 });
+}
+
+function escolherMelhoria(i) {
+  if (!pausado) return;
+  const m = MELHORIAS[i];
+  heroi.bonusNivel[m.atributo] = (heroi.bonusNivel[m.atributo] || 0) + m.valor;
+  aplicarAtributos();
+  montarPainelAtributos();
+  atualizarHUDHeroi();
+  niveisPendentes--;
+  if (niveisPendentes > 0) {
+    abrirEscolhaNivel();
+    return;
+  }
+  $('levelup').classList.add('hidden');
+  pausado = false;
+  if (!conversa && estado === 'aventura') controles.classList.remove('hidden');
+  mostrarAviso(`${m.nome} +${m.valor}!`);
+}
+
+$('levelup-options').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-melhoria]');
+  if (b) escolherMelhoria(Number(b.dataset.melhoria));
+});
+// no computador: teclas A a E (ou 1 a 5)
+window.addEventListener('keydown', (e) => {
+  if (!pausado) return;
+  const i = ['KeyA', 'KeyB', 'KeyC', 'KeyD', 'KeyE'].indexOf(e.code);
+  const j = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].indexOf(e.code);
+  if (i >= 0 || j >= 0) escolherMelhoria(i >= 0 ? i : j);
+});
 
 function atualizarContadorCastelo() {
   if (!duendesCastelo) return;
@@ -1923,7 +2013,9 @@ function montarPainelAtributos() {
         ${botao}
       </div>`;
   }).join('');
+  const max = h.nivel >= XP.nivelMaximo;
   $('stats-body').innerHTML = `
+    <div class="painel-nivel"><b>Nível ${h.nivel}</b><span>${max ? 'nível máximo' : `XP ${h.xp} / ${xpParaSubir(h.nivel)}`}</span></div>
     <div class="atributos">${linhas}</div>
     <h3>Itens <small>${h.equipados.length}/${MAX_EQUIPADOS} nas mãos</small></h3>
     ${itens}`;
@@ -1974,8 +2066,11 @@ function loop() {
   } else if (estado === 'criacao') {
     atualizarPrevia(dt, tempo);
     estudio.atualizar(dt, tempo);
+  } else if (pausado) {
+    // escolhendo a melhoria de nível: tudo parado
   } else if (estado === 'aventura' || (estado === 'portal' && heroi)) {
     atualizarHeroi(dt, tempo);
+    if (mapa === castelo) orbes.atualizar(dt, heroi);
     inimigos.atualizar(dt, tempo);
     mapa.atualizar(dt, tempo, heroi.pos, camera);
     atualizarPortais(dt);
@@ -1998,7 +2093,7 @@ function loop() {
   }
 
   atualizarCamera(dt, tempo);
-  particulas.atualizar(dt);
+  if (!pausado) particulas.atualizar(dt);
   numeros.atualizar(dt);
   renderer.render(cena, camera);
 }
