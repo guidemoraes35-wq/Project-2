@@ -28,9 +28,15 @@ export const CONVERSA_CHEFE_NAO = [
   { texto: 'HA HA HA HA HA!', expressao: 'rindo', auto: 2.2 },
 ];
 
-/** Depois que o castelo é libertado (a recompensa ainda será definida). */
+/** Ao voltar do castelo depois de derrotar a Princesa: o Rei entrega o Gorro dos Gnomos. */
+export const CONVERSA_CHEFE_PRESENTE = [
+  { texto: 'Você voltou! E derrotou a Princesa Duendete!', expressao: 'surpreso' },
+  { texto: 'Como prometido, aqui está o seu presente….. apropriado: o Gorro dos Gnomos!', expressao: 'misterioso' },
+];
+
+/** Se o jogador voltar a falar com o Rei depois de receber o gorro. */
 export const CONVERSA_CHEFE_VITORIA = [
-  { texto: 'Você derrotou a Princesa Duendete! Seu presente….. logo, logo.', expressao: 'misterioso' },
+  { texto: 'Esse gorro fica ótimo em você, humano.', expressao: 'misterioso' },
 ];
 
 /** Se o jogador voltar a falar com o chefe depois de aceitar a missão. */

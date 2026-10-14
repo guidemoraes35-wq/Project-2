@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
   CLASSES, DUENDE, ARQUEIRO, CHEFAO, ATRIBUTOS, REGRAS, NOMES_ATRIBUTO, calcularDano, pontosDeAtaque, vidaPorSegundo,
-  GENEROS, APARENCIAS, ROUPAS, ROUPA_SIMPLES, PRESENTES, atributosHeroi, textoBonus, HEROI_BASE, MAX_EQUIPADOS, GNOMO_CHEFE,
+  GENEROS, APARENCIAS, ROUPAS, ROUPA_SIMPLES, PRESENTES, atributosHeroi, textoBonus, HEROI_BASE, ESPACOS, GNOMO_CHEFE,
 } from './config.js';
 import { Input } from './input.js';
 import { criarMundo, texturaBrilho } from './world.js';
@@ -15,7 +15,7 @@ import { criarCastelo } from './castelo.js';
 import { criarDuendesCastelo } from './duendesCastelo.js';
 import { criarOrbes } from './xp.js';
 import { XP, xpParaSubir, MELHORIAS, DUENDE_FRACO, ARQUEIRO_CASTELO, DUENDE_MAGICO, PRINCESA, ITENS, item, ATAQUES_HEROI } from './config.js';
-import { CONVERSA_CHEFE, CONVERSA_CHEFE_SIM, CONVERSA_CHEFE_NAO, CONVERSA_CHEFE_LEMBRETE, CONVERSA_CHEFE_VITORIA, CONVERSA_PRINCESA_MORTE } from './conversas.js';
+import { CONVERSA_CHEFE, CONVERSA_CHEFE_SIM, CONVERSA_CHEFE_NAO, CONVERSA_CHEFE_LEMBRETE, CONVERSA_CHEFE_VITORIA, CONVERSA_PRINCESA_MORTE, CONVERSA_CHEFE_PRESENTE } from './conversas.js';
 
 // ------------------------------------------------------------------ Elementos
 const $ = (id) => document.getElementById(id);
@@ -1177,9 +1177,11 @@ function atualizarCamera(dt, t) {
   alvoCam.set(foco.x, 1.3 - (1 - (cam.zoom ?? 1)) * 0.6, foco.z);
   let dist = cam.dist * (cam.zoom ?? 1);
   // nos corredores do labirinto a câmera fica mais alta, olhando por cima das paredes
-  const noLabirinto = heroi && mapa === castelo && castelo.noLabirinto(heroi.pos.z);
-  cam.minPitch = (cam.minPitch ?? 0.08) + ((noLabirinto ? 0.85 : 0.08) - (cam.minPitch ?? 0.08)) * Math.min(1, dt * 3);
+  const alvoPitch = heroi && mapa === castelo ? castelo.pitchMinimo(heroi.pos.z) : 0.08;
+  cam.minPitch = (cam.minPitch ?? 0.08) + (alvoPitch - (cam.minPitch ?? 0.08)) * Math.min(1, dt * 3);
   if (cam.pitch < cam.minPitch) cam.pitch = cam.minPitch;
+  // dentro do castelo (passagem, labirinto e sala) a câmera também desce suave quando dá
+  if (heroi && mapa === castelo && heroi.pos.z < -44 && cam.pitch > cam.minPitch) cam.pitch += (cam.minPitch - cam.pitch) * Math.min(1, dt * 1.5);
   // se uma parede ficar entre a câmera e o herói, a câmera chega mais perto
   if (heroi && mapa?.colide && (estado === 'aventura' || estado === 'portal')) {
     const sp = Math.sin(cam.yaw) * Math.cos(cam.pitch), cpz = Math.cos(cam.yaw) * Math.cos(cam.pitch);
@@ -1282,6 +1284,26 @@ function iconePresente(id) {
       <path d="M50.5 12 L56 6" stroke="#c8d2e0" stroke-width="7"/>
       <path d="M8 58 L12 54" stroke="#c8d2e0" stroke-width="7"/>
       <circle cx="18" cy="47" r="2.8" fill="#5a3a20"/><circle cx="43" cy="20" r="2.8" fill="#5a3a20"/></svg>`;
+  }
+  if (id === 'espadaDuendeira') {
+    return `<svg viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M47 6 L58 6 L58 17 L54 18 L52 22 L48 23 L46 27 L42 28 L40 32 L36 33 L34 37 L27 48 L16 37 L27 30 L28 26 L32 24 L33 20 L37 18 L38 14 L42 12 L43 8 Z" fill="#9adf7a" stroke="#2f6a20" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M11 33 L31 53" stroke="#3a6a2a" stroke-width="6" stroke-linecap="round"/>
+      <path d="M19 45 L10 54" stroke="#2a1a10" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="8" cy="56" r="4.5" fill="#6aff4a"/></svg>`;
+  }
+  if (id === 'feiticoDuendes') {
+    return `<svg viewBox="0 0 64 64" aria-hidden="true">
+      <circle cx="32" cy="32" r="14" fill="#a8ff6a" stroke="#3ad02a" stroke-width="3"/>
+      <ellipse cx="32" cy="32" rx="25" ry="9" fill="none" stroke="#7dff4a" stroke-width="2.5" transform="rotate(-25 32 32)"/>
+      <ellipse cx="32" cy="32" rx="25" ry="9" fill="none" stroke="#7dff4a" stroke-width="2.5" transform="rotate(35 32 32)"/>
+      <circle cx="27" cy="27" r="4" fill="#ffffff" opacity="0.7"/></svg>`;
+  }
+  if (id === 'gorroGnomos') {
+    return `<svg viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M14 50 C16 34 22 20 32 12 C40 8 50 12 52 22 C46 18 40 20 38 28 C40 36 46 44 50 50 Z" fill="#d02a26" stroke="#7a1010" stroke-width="2" stroke-linejoin="round"/>
+      <rect x="10" y="48" width="44" height="8" rx="4" fill="#b81e1c" stroke="#7a1010" stroke-width="2"/>
+      <circle cx="52" cy="24" r="5" fill="#f6f4ee"/></svg>`;
   }
   if (id === 'escudoDuendeiro') {
     // escudo verde com espinhos e uma pedra brilhante
@@ -1472,6 +1494,7 @@ let portais = [];            // { portal, mapa, destino }
 let missaoAceita = false;    // o herói aceitou ajudar os gnomos
 let princesaDerrotada = false; // a Princesa Duendete foi derrotada
 let bauAberto = false;       // o baú do labirinto já foi aberto
+let gorroEntregue = false;   // o Rei Gnomo já deu o Gorro dos Gnomos
 let aguas = [];              // jatos de água da vara
 let pausado = false;         // o jogo para enquanto o jogador escolhe a melhoria de nível
 let niveisPendentes = 0;     // níveis ganhos que ainda esperam uma escolha
@@ -1544,8 +1567,10 @@ function mostrarVilarejo() {
     ataqueT: -1,
     acertou: false,
     // o presente começa equipado; o herói pode segurar até dois itens
+    // o presente começa equipado (escudo na mão esquerda, armas na direita)
     inventario: [escolha.item],
-    equipados: [escolha.item],
+    equipamento: { cabeca: null, colar: null, dorso: null, maoD: null, maoE: null, calcas: null, pes: null,
+      [escolha.item === 'escudo' ? 'maoE' : 'maoD']: escolha.item },
     vivo: true,
     mortoT: 0,
     invul: 0,
@@ -1564,6 +1589,7 @@ function mostrarVilarejo() {
   hud.classList.remove('hidden', 'com-chefao');
   controles.classList.add('sem-super');
   $('stats-panel').classList.add('hidden');
+  $('bag-panel').classList.add('hidden');
   $('hud-name').textContent = 'Herói';
   entrarNoMapa('vilarejo', vilarejo.inicio);
   mostrarAviso('Bem-vindo ao Vilarejo!');
@@ -1596,7 +1622,7 @@ function derrotouPrincesa(d) {
   }, 1500);
   // um portal azul-claro aparece e leva de volta à vila dos gnomos
   const { x, z } = castelo.centroSala;
-  portais.push({ portal: criarPortal(castelo.scene, x, z, 0, { cor: 'azul' }), mapa: castelo, destino: voltarAoVilarejo });
+  portais.push({ portal: criarPortal(castelo.scene, x, z, 0, { cor: 'azul' }), mapa: castelo, destino: voltarComVitoria });
   tremor = Math.max(tremor, 0.4);
 }
 
@@ -1635,6 +1661,32 @@ function voltarAoVilarejo() {
   entrarNoMapa('vilarejo', { x: POSICAO_PORTAL_VILA.x + 2, z: POSICAO_PORTAL_VILA.z + 3, dir: 0 });
 }
 
+/** O portal azul leva de volta à praça, na frente do Rei Gnomo, que entrega o presente. */
+function voltarComVitoria() {
+  entrarNoMapa('vilarejo', { x: GNOMO_CHEFE.x, z: GNOMO_CHEFE.z + 2.6, dir: Math.PI });
+  if (gorroEntregue) return;
+  setTimeout(() => {
+    if (estado !== 'aventura' || mapa !== vilarejo || conversa || povo.chefe.morto) return;
+    iniciarConversa(CONVERSA_CHEFE_PRESENTE, {
+      nome: GNOMO_CHEFE.nome, com: povo.chefe.pos, expressar: povo.expressar,
+      aoTerminar: () => {
+        gorroEntregue = true;
+        ganharItens(['gorroGnomos']);
+      },
+    });
+  }, 900);
+}
+
+/** Coloca itens na mochila e mostra o que foi encontrado. */
+function ganharItens(ids) {
+  for (const id of ids) if (!heroi.inventario.includes(id)) heroi.inventario.push(id);
+  montarMochila();
+  tmp.copy(heroi.pos).setY(1.4);
+  particulas.emitir(tmp, 0xffe08a, 50, { vel: 3, vida: 0.9, subir: 1.2 });
+  mostrarAviso(`Você recebeu: ${ids.map((id) => item(id).nome).join(' e ')}!`);
+  $('bag-btn').classList.add('novo');
+}
+
 function mostrarDica(texto) {
   const dica = $('hint');
   dica.textContent = texto;
@@ -1649,7 +1701,7 @@ function montarRigHeroi(x, z) {
     heroi.rig.root.parent?.remove(heroi.rig.root);
     descartarRig(heroi.rig);
   }
-  const rig = criarHeroi({ ...heroi.escolha, itens: heroi.equipados });
+  const rig = criarHeroi({ ...heroi.escolha, equipamento: heroi.equipamento });
   rig.root.position.set(x, 0, z);
   rig.root.rotation.y = heroi.dir;
   (mapa ? mapa.scene : vilarejo.scene).add(rig.root);
@@ -1660,7 +1712,7 @@ function montarRigHeroi(x, z) {
 /** Recalcula os atributos (base + itens equipados) e o que depende deles. */
 function aplicarAtributos() {
   const antes = heroi.hpMax || 0;
-  heroi.atributos = atributosHeroi(heroi.equipados);
+  heroi.atributos = atributosHeroi(Object.values(heroi.equipamento).filter(Boolean));
   for (const [k, v] of Object.entries(heroi.bonusNivel)) heroi.atributos[k] += v;
   heroi.hpMax = heroi.atributos.vida;
   heroi.velocidade = heroi.atributos.velocidade * REGRAS.escalaVelocidade;
@@ -1711,6 +1763,7 @@ function abrirEscolhaNivel() {
   pausado = true;
   controles.classList.add('hidden');
   $('stats-panel').classList.add('hidden');
+  $('bag-panel').classList.add('hidden');
   input.reiniciar();
   const nivel = heroi.nivel - niveisPendentes + 1;
   $('levelup-title').textContent = `Nível ${nivel}!`;
@@ -1831,25 +1884,34 @@ function atualizarVeneno(dt) {
  * um jato de água e, sem uma arma (só escudo ou nada), ele dá socos.
  */
 function ataqueAtual() {
-  const m = heroi.rig.maoD;
-  return m === 'espada' ? ATAQUES_HEROI.espada : m === 'vara' ? ATAQUES_HEROI.vara : ATAQUES_HEROI.soco;
+  const eq = heroi.equipamento;
+  const arma = [eq.maoD, eq.maoE].find((id) => id && item(id).arma);
+  if (arma === 'vara') {
+    // com o Feitiço dos Duendes na outra mão, a vara lança veneno em vez de água
+    return eq.maoD === 'feiticoDuendes' || eq.maoE === 'feiticoDuendes' ? ATAQUES_HEROI.veneno : ATAQUES_HEROI.vara;
+  }
+  if (arma) return { ...ATAQUES_HEROI.espada, danoExtra: item(arma).danoExtra };
+  return ATAQUES_HEROI.soco;
 }
 
 const geoAgua = new THREE.SphereGeometry(0.2, 14, 10);
 const matAgua = new THREE.MeshStandardMaterial({ color: 0x6ac8ff, emissive: 0x1a6aaa, emissiveIntensity: 0.8, transparent: true, opacity: 0.85, roughness: 0.1 });
 const matBrilhoAgua = new THREE.SpriteMaterial({ map: texturaBrilho('rgba(90,190,255,1)'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.8 });
+const matVenenoHeroi = new THREE.MeshStandardMaterial({ color: 0xa8ff6a, emissive: 0x3ac81a, emissiveIntensity: 1.2, transparent: true, opacity: 0.85, roughness: 0.2 });
+const matBrilhoVenenoHeroi = new THREE.SpriteMaterial({ map: texturaBrilho('rgba(120,255,60,1)'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.8 });
 
 /** Jato de água da vara: segue reto (com uma leve mira) até acertar alguém. */
 function lancarAgua(atk, alvo) {
-  const malha = new THREE.Mesh(geoAgua, matAgua);
-  const brilho = new THREE.Sprite(matBrilhoAgua);
+  const veneno = atk.tipo === 'veneno';
+  const malha = new THREE.Mesh(geoAgua, veneno ? matVenenoHeroi : matAgua);
+  const brilho = new THREE.Sprite(veneno ? matBrilhoVenenoHeroi : matBrilhoAgua);
   brilho.scale.setScalar(1.1);
   malha.add(brilho);
   malha.position.set(heroi.pos.x + Math.sin(heroi.dir) * 0.6, 1.25, heroi.pos.z + Math.cos(heroi.dir) * 0.6);
   mapa.scene.add(malha);
   const vel = new THREE.Vector3(Math.sin(heroi.dir), 0, Math.cos(heroi.dir)).multiplyScalar(atk.velocidade);
-  aguas.push({ malha, vel, alvo, vida: atk.alcance / atk.velocidade, ataque: heroi.atributos[atk.atributo] });
-  particulas.emitir(malha.position, 0x8ad8ff, 12, { vel: 2, vida: 0.4 });
+  aguas.push({ malha, vel, alvo, vida: atk.alcance / atk.velocidade, ataque: heroi.atributos[atk.atributo], atk });
+  particulas.emitir(malha.position, veneno ? 0x8aff4a : 0x8ad8ff, 12, { vel: 2, vida: 0.4 });
 }
 
 function atualizarAguas(dt) {
@@ -1862,20 +1924,22 @@ function atualizarAguas(dt) {
     }
     a.malha.position.addScaledVector(a.vel, dt);
     a.malha.scale.setScalar(1 + Math.sin(a.vida * 30) * 0.12);
-    particulas.emitir(a.malha.position, Math.random() < 0.5 ? 0x6ac8ff : 0xd8f2ff, 2, { vel: 0.8, vida: 0.35, gravidade: 4 });
+    const corA = a.atk.tipo === 'veneno' ? [0x7dff3a, 0xd8ffb0] : [0x6ac8ff, 0xd8f2ff];
+    particulas.emitir(a.malha.position, corA[Math.random() < 0.5 ? 0 : 1], 2, { vel: 0.8, vida: 0.35, gravidade: 4 });
     let fim = a.vida <= 0 || (mapa.colide && mapa.colide(a.malha.position.x, a.malha.position.z, 0.1));
     if (!fim) {
       for (const alvo of inimigos.alvos()) {
         tmp2.set(alvo.pos.x, 0.9, alvo.pos.z);
         if (tmp2.distanceTo(a.malha.position) < 0.75) {
-          inimigos.atingir(alvo, a.ataque, a.malha.position);
+          if (a.atk.tipo === 'veneno') inimigos.envenenar(alvo, a.ataque, a.atk.duracaoVeneno, a.atk.multiplicador);
+          else inimigos.atingir(alvo, a.ataque, a.malha.position);
           fim = true;
           break;
         }
       }
     }
     if (fim) {
-      particulas.emitir(a.malha.position, 0x8ad8ff, 30, { vel: 4, vida: 0.6, gravidade: 8 });
+      particulas.emitir(a.malha.position, a.atk.tipo === 'veneno' ? 0x8aff4a : 0x8ad8ff, 30, { vel: 4, vida: 0.6, gravidade: 8 });
       a.malha.parent?.remove(a.malha);
       aguas.splice(i, 1);
     }
@@ -1917,7 +1981,7 @@ function atualizarHeroi(dt, t) {
   const atk = ataqueAtual();
   if (!conversa && input.atacando() && h.recarga <= 0 && !atacando) {
     // mira automática no inimigo mais próximo (a água alcança mais longe)
-    let alvo = null, melhor = atk.tipo === 'agua' ? 9 : 3;
+    let alvo = null, melhor = atk.tipo === 'agua' || atk.tipo === 'veneno' ? 9 : 3;
     for (const g of inimigos.alvos()) {
       const d = distXZ(g.pos, h.pos);
       if (d < melhor) { melhor = d; alvo = g; }
@@ -1932,8 +1996,12 @@ function atualizarHeroi(dt, t) {
     h.ataqueT += dt;
     if (!h.acertou && h.ataqueT >= atk.acerto) {
       h.acertou = true;
-      if (atk.tipo === 'agua') lancarAgua(atk, h.alvo);
-      else inimigos.atacar(h.pos, h.dir, atk.alcance, atk.arco, h.atributos[atk.atributo]);
+      if (atk.tipo === 'agua' || atk.tipo === 'veneno') lancarAgua(atk, h.alvo);
+      else {
+        // Espada Duendeira: dano extra nos duendes (castelo) e um pouco menos nos outros seres
+        const extra = atk.danoExtra ? (mapa === castelo ? atk.danoExtra.duendes : atk.danoExtra.outros) : 0;
+        inimigos.atacar(h.pos, h.dir, atk.alcance, atk.arco, h.atributos[atk.atributo], extra);
+      }
     }
     if (h.ataqueT >= atk.duracao) h.ataqueT = -1;
   }
@@ -1958,16 +2026,22 @@ function atualizarHeroi(dt, t) {
   }
 }
 
-/** O baú do labirinto tem um escudo; quem ganhou o escudo de presente acha o Escudo Duendeiro. */
+/**
+ * O baú do labirinto depende do presente escolhido:
+ * escudo → Escudo Duendeiro e Espada Duendeira; espada → Escudo e Espada Duendeira;
+ * vara → Escudo e Feitiço dos Duendes.
+ */
+const CONTEUDO_BAU = {
+  escudo: ['escudoDuendeiro', 'espadaDuendeira'],
+  espada: ['escudo', 'espadaDuendeira'],
+  vara: ['escudo', 'feiticoDuendes'],
+};
 function abrirBau() {
   bauAberto = true;
   castelo.abrirBau();
-  const id = heroi.escolha.item === 'escudo' ? 'escudoDuendeiro' : 'escudo';
-  if (!heroi.inventario.includes(id)) heroi.inventario.push(id);
-  montarPainelAtributos();
   tmp.set(castelo.bau.x, 1.2, castelo.bau.z);
   particulas.emitir(tmp, 0xffe08a, 60, { vel: 3.5, vida: 1, subir: 1.5 });
-  mostrarAviso(`Você encontrou: ${item(id).nome}!`);
+  ganharItens(CONTEUDO_BAU[heroi.escolha.item]);
 }
 
 /** Portais do mapa atual: girar, brilhar e levar o herói quando ele entra. */
@@ -1997,6 +2071,7 @@ function iniciarConversa(falas, { nome, com = null, expressar = null, aoEscolher
   controles.classList.add('hidden');
   $('talk-btn').classList.add('hidden');
   $('stats-panel').classList.add('hidden');
+  $('bag-panel').classList.add('hidden');
   input.reiniciar();
   $('dialog').classList.remove('hidden');
   mostrarFala();
@@ -2075,7 +2150,9 @@ $('dialog-buttons').addEventListener('click', (e) => {
 // ------------------------------------------------------------------ Conversa com o Rei Gnomo
 function conversarComChefe() {
   const base = { nome: GNOMO_CHEFE.nome, com: povo.chefe.pos, expressar: povo.expressar };
-  if (princesaDerrotada) {
+  if (princesaDerrotada && !gorroEntregue) {
+    iniciarConversa(CONVERSA_CHEFE_PRESENTE, { ...base, aoTerminar: () => { gorroEntregue = true; ganharItens(['gorroGnomos']); } });
+  } else if (princesaDerrotada) {
     iniciarConversa(CONVERSA_CHEFE_VITORIA, base);
   } else if (missaoAceita) {
     iniciarConversa(CONVERSA_CHEFE_LEMBRETE, base);
@@ -2115,7 +2192,7 @@ const ICONE_PERSONAGEM = `<svg viewBox="0 0 64 64" aria-hidden="true">
 
 const sinal = (v) => `${v > 0 ? '+' : ''}${v}`;
 
-/** Atributos (só os números, com o bônus dos itens equipados) e a lista de itens. */
+/** Atributos do herói: só os números, com o bônus dos itens e dos níveis. */
 function montarPainelAtributos() {
   const h = heroi;
   const linhas = ATRIBUTOS.map((a) => {
@@ -2123,51 +2200,175 @@ function montarPainelAtributos() {
     const extra = bonus ? ` <span class="${bonus > 0 ? 'bonus-mais' : 'bonus-menos'}">(${sinal(bonus)})</span>` : '';
     return `<div class="atributo"><span>${a.nome}</span><b>${h.atributos[a.chave]}${extra}</b></div>`;
   }).join('');
-  const cheio = h.equipados.length >= MAX_EQUIPADOS;
-  const itens = h.inventario.map((id) => {
-    const it = item(id);
-    const equipado = h.equipados.includes(id);
-    // só cabe um escudo por vez (os dois vão no braço esquerdo)
-    const outroEscudo = it.escudo && h.equipados.some((e) => e !== id && item(e).escudo);
-    const efeitos = Object.entries(it.bonus)
-      .map(([k, v]) => `<li class="${v > 0 ? 'bonus-mais' : 'bonus-menos'}">${sinal(v)} ${ATRIBUTOS.find((a) => a.chave === k).nome}</li>`)
-      .join('');
-    const botao = equipado
-      ? `<button class="botao-item remover" data-item="${id}">Remover</button>`
-      : `<button class="botao-item" data-item="${id}" ${cheio || outroEscudo ? 'disabled' : ''}>Equipar</button>`;
-    return `<div class="painel-item${equipado ? ' equipado' : ''}">
-        <span class="icone-presente">${iconePresente(id)}</span>
-        <div class="painel-item-info"><b>${it.nome}</b>${equipado ? '<small>Equipado</small>' : ''}<ul>${efeitos}</ul></div>
-        ${botao}
-      </div>`;
-  }).join('');
   const max = h.nivel >= XP.nivelMaximo;
   $('stats-body').innerHTML = `
     <div class="painel-nivel"><b>Nível ${h.nivel}</b><span>${max ? 'nível máximo' : `XP ${h.xp} / ${xpParaSubir(h.nivel)}`}</span></div>
-    <div class="atributos">${linhas}</div>
-    <h3>Itens <small>${h.equipados.length}/${MAX_EQUIPADOS} nas mãos</small></h3>
-    ${itens}`;
+    <div class="atributos">${linhas}</div>`;
 }
 
-function alternarItem(id) {
+$('stats-btn').innerHTML = ICONE_PERSONAGEM;
+$('stats-btn').addEventListener('click', () => {
+  $('bag-panel').classList.add('hidden');
+  $('stats-panel').classList.toggle('hidden');
+});
+$('stats-close').addEventListener('click', () => $('stats-panel').classList.add('hidden'));
+
+// ------------------------------------------------------------------ Mochila
+// Os itens que o herói tem e os lugares do corpo onde podem ser equipados, em volta de um
+// retrato do herói. Tocar num item equipa; tocar num lugar ocupado guarda o item de volta.
+const ICONE_MOCHILA = `<svg viewBox="0 0 64 64" aria-hidden="true">
+  <path d="M22 16 C22 8 42 8 42 16" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+  <rect x="12" y="16" width="40" height="40" rx="10" fill="currentColor"/>
+  <rect x="20" y="34" width="24" height="14" rx="3" fill="#1a1426" opacity="0.55"/>
+  <rect x="29" y="32" width="6" height="6" rx="1.5" fill="#1a1426" opacity="0.8"/></svg>`;
+let espacoEscolhido = null; // lugar tocado para escolher o item dele
+
+/** Em qual lugar um item vai. Escudos só na mão esquerda; armas preferem a direita. */
+function lugarPara(id) {
+  const it = item(id);
+  const eq = heroi.equipamento;
+  if (it.lugar !== 'mao') return it.lugar;
+  if (it.escudo) return 'maoE';
+  if (espacoEscolhido === 'maoD' || espacoEscolhido === 'maoE') return espacoEscolhido;
+  if (id === 'feiticoDuendes') return !eq.maoE || item(eq.maoE).escudo ? 'maoE' : !eq.maoD ? 'maoD' : 'maoE';
+  if (!eq.maoD) return 'maoD';
+  if (!eq.maoE) return 'maoE';
+  return 'maoD';
+}
+
+function serveNoEspaco(id, espaco) {
+  const it = item(id);
+  if (espaco === 'maoD') return it.lugar === 'mao' && !it.escudo;
+  if (espaco === 'maoE') return it.lugar === 'mao';
+  return it.lugar === espaco;
+}
+
+function equiparItem(id) {
+  const eq = heroi.equipamento;
+  for (const k of Object.keys(eq)) if (eq[k] === id) eq[k] = null;
+  eq[lugarPara(id)] = id;
+  espacoEscolhido = null;
+  equipamentoMudou();
+}
+
+function guardarItem(espaco) {
+  heroi.equipamento[espaco] = null;
+  equipamentoMudou();
+}
+
+function equipamentoMudou() {
   const h = heroi;
-  if (h.equipados.includes(id)) h.equipados = h.equipados.filter((i) => i !== id);
-  else if (h.equipados.length < MAX_EQUIPADOS && !(item(id).escudo && h.equipados.some((e) => item(e).escudo))) h.equipados = [...h.equipados, id];
   montarRigHeroi(h.pos.x, h.pos.z);
   aplicarAtributos();
   montarPainelAtributos();
+  montarMochila();
   atualizarHUDHeroi();
   tmp.copy(h.pos).setY(1.2);
   particulas.emitir(tmp, 0xffe08a, 25, { vel: 2.5, vida: 0.6, subir: 0.6 });
 }
 
-$('stats-body').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-item]');
-  if (b && !b.disabled) alternarItem(b.dataset.item);
+const textoItem = (it) => it.descricao || Object.entries(it.bonus).map(([k, v]) => `${sinal(v)} ${ATRIBUTOS.find((a) => a.chave === k).nome}`).join(', ');
+
+function montarMochila() {
+  if (!heroi) return;
+  const eq = heroi.equipamento;
+  for (const e of ESPACOS) {
+    const el = document.querySelector(`.espaco-corpo[data-espaco="${e.id}"]`);
+    const id = eq[e.id];
+    el.classList.toggle('ocupado', !!id);
+    el.classList.toggle('escolhido', espacoEscolhido === e.id);
+    el.innerHTML = id
+      ? `<span class="icone-presente">${iconePresente(id)}</span><span class="espaco-nome">${item(id).nome}</span>`
+      : `<span class="espaco-vazio"></span><span class="espaco-nome">${e.nome}</span>`;
+    el.setAttribute('aria-label', id ? `${e.nome}: ${item(id).nome}. Toque para guardar` : `${e.nome}: vazio`);
+  }
+  const lista = heroi.inventario.map((id) => {
+    const it = item(id);
+    const equipado = Object.values(eq).includes(id);
+    const apagado = espacoEscolhido && !serveNoEspaco(id, espacoEscolhido);
+    return `<button class="item-mochila${equipado ? ' equipado' : ''}${apagado ? ' apagado' : ''}" data-item="${id}" ${apagado ? 'disabled' : ''}>
+        <span class="icone-presente">${iconePresente(id)}</span>
+        <span class="item-mochila-texto"><b>${it.nome}</b><small>${textoItem(it)}</small></span>
+        <span class="item-mochila-estado">${equipado ? 'Equipado' : 'Equipar'}</span>
+      </button>`;
+  }).join('');
+  $('bag-items').innerHTML = lista;
+  $('bag-hint').textContent = espacoEscolhido
+    ? `Escolha um item para: ${ESPACOS.find((e) => e.id === espacoEscolhido).nome}`
+    : 'Toque num item para equipar. Toque num lugar ocupado para guardar o item.';
+  atualizarRetrato();
+}
+
+// retrato do herói no meio da mochila (um renderizador pequeno só para ele)
+const retrato = { renderer: null, scene: null, camera: null, rig: null };
+function atualizarRetrato() {
+  if (!retrato.renderer) {
+    const canvas = $('bag-preview');
+    retrato.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    retrato.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    retrato.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    retrato.scene = new THREE.Scene();
+    retrato.scene.add(new THREE.HemisphereLight(0xdcefff, 0x4a3a28, 1.4));
+    const luz = new THREE.DirectionalLight(0xfff0d8, 1.8);
+    luz.position.set(2, 4, 5);
+    retrato.scene.add(luz);
+    retrato.camera = new THREE.PerspectiveCamera(30, 0.66, 0.1, 20);
+    retrato.camera.position.set(0, 1.2, 5.2);
+    retrato.camera.lookAt(0, 1.05, 0);
+  }
+  if (retrato.rig) {
+    retrato.scene.remove(retrato.rig.root);
+    descartarRig(retrato.rig);
+  }
+  retrato.rig = criarHeroi({ ...heroi.escolha, equipamento: heroi.equipamento });
+  retrato.rig.root.rotation.y = 0.35;
+  retrato.scene.add(retrato.rig.root);
+}
+
+function desenharRetrato(dt, t) {
+  if (!retrato.rig || $('bag-panel').classList.contains('hidden')) return;
+  const canvas = $('bag-preview');
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== Math.round(w * retrato.renderer.getPixelRatio())) {
+    retrato.renderer.setSize(w, h, false);
+    retrato.camera.aspect = w / h;
+    retrato.camera.updateProjectionMatrix();
+  }
+  retrato.rig.root.rotation.y = 0.35 + Math.sin(t * 0.6) * 0.35;
+  animarRig(retrato.rig, dt, t, 0);
+  retrato.renderer.render(retrato.scene, retrato.camera);
+}
+
+$('bag-btn').innerHTML = ICONE_MOCHILA;
+$('bag-btn').addEventListener('click', () => {
+  $('stats-panel').classList.add('hidden');
+  $('bag-btn').classList.remove('novo');
+  espacoEscolhido = null;
+  $('bag-panel').classList.toggle('hidden');
+  if (!$('bag-panel').classList.contains('hidden')) montarMochila();
 });
-$('stats-btn').innerHTML = ICONE_PERSONAGEM;
-$('stats-btn').addEventListener('click', () => $('stats-panel').classList.toggle('hidden'));
-$('stats-close').addEventListener('click', () => $('stats-panel').classList.add('hidden'));
+$('bag-close').addEventListener('click', () => $('bag-panel').classList.add('hidden'));
+$('bag-items').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-item]');
+  if (!b || b.disabled) return;
+  const id = b.dataset.item;
+  // tocar num item já equipado (sem um lugar escolhido) guarda ele
+  const onde = Object.keys(heroi.equipamento).find((k) => heroi.equipamento[k] === id);
+  if (onde && !espacoEscolhido) guardarItem(onde);
+  else equiparItem(id);
+});
+$('bag-doll').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-espaco]');
+  if (!b) return;
+  const espaco = b.dataset.espaco;
+  if (heroi.equipamento[espaco]) {
+    espacoEscolhido = null;
+    guardarItem(espaco);
+  } else {
+    espacoEscolhido = espacoEscolhido === espaco ? null : espaco;
+    montarMochila();
+  }
+});
 
 // ------------------------------------------------------------------ Loop
 const relogio = new THREE.Clock();
@@ -2223,6 +2424,7 @@ function loop() {
 
   atualizarCamera(dt, tempo);
   if (!pausado) particulas.atualizar(dt);
+  if (estado === 'aventura') desenharRetrato(dt, tempo);
   numeros.atualizar(dt);
   renderer.render(cena, camera);
 }

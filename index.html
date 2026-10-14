@@ -39,6 +39,26 @@
       <div class="chefao-barra"><div id="boss-fill"></div></div>
     </div>
     <button id="stats-btn" class="botao-atributos" aria-label="Atributos do personagem"></button>
+    <button id="bag-btn" class="botao-mochila" aria-label="Mochila"></button>
+    <div id="bag-panel" class="painel-mochila hidden" role="dialog" aria-label="Mochila">
+      <div class="painel-topo"><h2>Mochila</h2><button id="bag-close" aria-label="Fechar">✕</button></div>
+      <div id="bag-doll" class="boneco">
+        <div class="boneco-coluna">
+          <button class="espaco-corpo" data-espaco="cabeca"></button>
+          <button class="espaco-corpo" data-espaco="dorso"></button>
+          <button class="espaco-corpo" data-espaco="calcas"></button>
+          <button class="espaco-corpo" data-espaco="pes"></button>
+        </div>
+        <canvas id="bag-preview" class="boneco-retrato"></canvas>
+        <div class="boneco-coluna">
+          <button class="espaco-corpo" data-espaco="colar"></button>
+          <button class="espaco-corpo" data-espaco="maoD"></button>
+          <button class="espaco-corpo" data-espaco="maoE"></button>
+        </div>
+      </div>
+      <p id="bag-hint" class="mochila-dica"></p>
+      <div id="bag-items" class="itens-mochila"></div>
+    </div>
     <div id="stats-panel" class="painel-atributos hidden" role="dialog" aria-label="Atributos do personagem">
       <div class="painel-topo"><h2>Personagem</h2><button id="stats-close" aria-label="Fechar">✕</button></div>
       <div id="stats-body"></div>

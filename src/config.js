@@ -204,20 +204,33 @@ export const ROUPAS = [
 export const ROUPA_SIMPLES = { id: 'linho', principal: 0xcdbf9f, detalhe: 0x8a7656, calca: 0x6e6250, bota: 0x4a3a28 };
 
 /** Atributos do personagem definitivo antes do bônus do presente. */
-export const HEROI_BASE = { vida: 10, poder: 5, velocidade: 25, defesa: 5, inteligencia: 5 };
+export const HEROI_BASE = { vida: 10, poder: 8, velocidade: 25, defesa: 5, inteligencia: 5 };
 
-/** Quantos itens o herói pode segurar ao mesmo tempo. */
-export const MAX_EQUIPADOS = 2;
+/** Lugares do corpo onde se equipa um item (um item em cada). */
+export const ESPACOS = [
+  { id: 'cabeca', nome: 'Cabeça' },
+  { id: 'colar', nome: 'Colar' },
+  { id: 'dorso', nome: 'Dorso' },
+  { id: 'maoD', nome: 'Mão direita' },
+  { id: 'maoE', nome: 'Mão esquerda' },
+  { id: 'calcas', nome: 'Calças' },
+  { id: 'pes', nome: 'Pés' },
+];
 
 /**
  * Todos os itens e o bônus de cada um. Os três primeiros são os presentes da criação.
  * A espada ataca de perto, a vara lança água e os escudos não têm ataque próprio (o herói dá socos).
  */
 export const ITENS = [
-  { id: 'espada', nome: 'Espada', bonus: { poder: 15 }, presente: true },
-  { id: 'vara', nome: 'Vara', bonus: { inteligencia: 10, vida: 5 }, presente: true },
-  { id: 'escudo', nome: 'Escudo', bonus: { defesa: 15, velocidade: -3 }, presente: true, escudo: true },
-  { id: 'escudoDuendeiro', nome: 'Escudo Duendeiro', bonus: { defesa: 20, velocidade: -5 }, escudo: true },
+  { id: 'espada', nome: 'Espada', bonus: { poder: 15 }, presente: true, lugar: 'mao', arma: true },
+  { id: 'vara', nome: 'Vara', bonus: { inteligencia: 10, vida: 5 }, presente: true, lugar: 'mao', arma: true },
+  { id: 'escudo', nome: 'Escudo', bonus: { defesa: 15, velocidade: -3 }, presente: true, lugar: 'mao', escudo: true },
+  { id: 'escudoDuendeiro', nome: 'Escudo Duendeiro', bonus: { defesa: 20, velocidade: -5 }, lugar: 'mao', escudo: true },
+  // a Espada Duendeira causa dano extra em cada golpe: +15 nos duendes e +10 nos outros seres
+  { id: 'espadaDuendeira', nome: 'Espada Duendeira', bonus: {}, lugar: 'mao', arma: true, danoExtra: { duendes: 15, outros: 10 }, descricao: '+15 de dano em duendes, +10 nos outros' },
+  // equipado junto com a vara, troca o jato de água pelo veneno dos duendes mágicos
+  { id: 'feiticoDuendes', nome: 'Feitiço dos Duendes', bonus: {}, lugar: 'mao', descricao: 'Com a vara: lança veneno em vez de água' },
+  { id: 'gorroGnomos', nome: 'Gorro dos Gnomos', bonus: { vida: 5, inteligencia: 5 }, lugar: 'cabeca' },
 ];
 export const PRESENTES = ITENS.filter((i) => i.presente);
 export const item = (id) => ITENS.find((i) => i.id === id);
@@ -226,6 +239,9 @@ export const item = (id) => ITENS.find((i) => i.id === id);
 export const ATAQUES_HEROI = {
   espada: { tipo: 'corte', atributo: 'poder', alcance: 1.9, arco: Math.PI * 0.7, recarga: 0.55, duracao: 0.45, acerto: 0.2 },
   vara: { tipo: 'agua', atributo: 'inteligencia', alcance: 10, velocidade: 14, recarga: 0.75, duracao: 0.5, acerto: 0.22 },
+  // vara + Feitiço dos Duendes: o veneno não machuca no contato, mas tira vida por 3 s
+  // (no total, 1,5 vez o dano que a água causaria)
+  veneno: { tipo: 'veneno', atributo: 'inteligencia', alcance: 10, velocidade: 11, recarga: 0.8, duracao: 0.5, acerto: 0.22, duracaoVeneno: 3, multiplicador: 1.5 },
   soco: { tipo: 'soco', atributo: 'poder', alcance: 1.35, arco: Math.PI * 0.5, recarga: 0.4, duracao: 0.32, acerto: 0.13 },
 };
 
@@ -298,7 +314,7 @@ export const CASTELO = {
 export const PRINCESA = {
   nome: 'Princesa Duendete',
   vida: 80, poder: 10, velocidade: 30, defesa: 15, inteligencia: 30,
-  invocacao: { intervalo: 5, quantidade: 5, preparo: 0.8, duracao: 1.2, maximo: 15 },
+  invocacao: { intervalo: 5, quantidade: 5, preparo: 0.8, duracao: 1.2, maximo: 5 }, // no máximo 5 vivos de cada vez
   distanciaIdeal: 7,
   raio: 0.45, escala: 1.2, alturaAcerto: 0.8,
 };

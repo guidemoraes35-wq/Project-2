@@ -54,12 +54,13 @@ O jogo não mostra dicas de para onde ir: o jogador descobre o mundo sozinho.
 
 ## Castelo dos Duendes
 
-A entrada é um pátio murado ao entardecer (torres, fogueira, tendas e barricadas). Uma passagem em
-arco pela fortaleza leva a um **labirinto de corredores** com vários caminhos possíveis e, no fim
+A entrada é um pátio murado ao entardecer (torres, fogueira, tendas e barricadas). Uma passagem
+aberta pela fortaleza, da largura de um corredor, leva direto a um **labirinto de corredores** com vários caminhos possíveis e, no fim
 dele, à **sala do tesouro**, cheia de ouro e joias, onde está a **Princesa Duendete**. Os duendes
 ficam parados até o herói chegar perto (9 m) e estão espalhados: 6 duendes fracos no pátio e o
 resto pelo labirinto, com arqueiros e mágicos do meio para o fim do caminho. No labirinto a câmera
-fica mais alta, olhando por cima das paredes. Se o herói cair, volta no portão do castelo.
+sobe aos poucos ao atravessar a passagem, olhando por cima das paredes, e desce um pouco ao entrar
+na sala do tesouro, cuja entrada tem colunas douradas e tochas. Se o herói cair, volta no portão do castelo.
 
 | | Vida | Poder | Velocidade | Defesa | Inteligência | Quantidade |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -69,18 +70,43 @@ fica mais alta, olhando por cima das paredes. Se o herói cair, volta no portão
 | Princesa Duendete | 80 | 10 | 30 | 15 | 30 | 1 |
 
 A **Princesa Duendete** foge do herói pela sala e, a cada 5 s, chama 5 duendes fracos para atacá-lo
-(no máximo 15 de uma vez). Quando a vida dela acaba, ela ainda fala com o herói — "Os Gnomos
+(no máximo 5 vivos de cada vez). Quando a vida dela acaba, ela ainda fala com o herói — "Os Gnomos
 saaa-….." e, já fraca, de joelhos, "Mentirosooossss" — e só então morre. Aparece um **portal
 azul-claro** que volta à vila dos gnomos.
 
-No meio do labirinto há um **baú** com um **Escudo** (+15 Defesa, −3 Velocidade). Quem ganhou o escudo
-de presente encontra o **Escudo Duendeiro**, verde e com espinhos (+20 Defesa, −5 Velocidade).
-Só dá para segurar um escudo por vez.
+No meio do labirinto há um **baú**. O que tem dentro depende do presente escolhido:
+
+| Presente | No baú |
+| --- | --- |
+| Escudo | Escudo Duendeiro e Espada Duendeira |
+| Espada | Escudo e Espada Duendeira |
+| Vara | Escudo e Feitiço dos Duendes |
+
+Ao voltar à vila pelo portal azul, o Rei Gnomo entrega o **Gorro dos Gnomos**.
+
+### Itens
+
+| Item | Lugar | Efeito |
+| --- | --- | --- |
+| Espada | mão | +15 Poder |
+| Vara | mão | +10 Inteligência, +5 Vida |
+| Escudo | mão esquerda | +15 Defesa, −3 Velocidade |
+| Escudo Duendeiro | mão esquerda | +20 Defesa, −5 Velocidade |
+| Espada Duendeira | mão | +15 de dano em cada golpe nos duendes, +10 nos outros seres |
+| Feitiço dos Duendes | mão | junto com a vara, troca o jato de água pelo veneno dos duendes mágicos |
+| Gorro dos Gnomos | cabeça | +5 Vida, +5 Inteligência |
+
+### Mochila
+
+O botão com a mochila (abaixo do botão do personagem) mostra um retrato do herói com os lugares em
+volta: cabeça, colar, dorso, calças, pés, mão direita e mão esquerda (um item em cada). Tocar num item
+equipa; tocar num lugar ocupado guarda o item; tocar num lugar vazio mostra só os itens que cabem nele.
 
 ### Ataques do herói
 
 - **Espada:** golpe de perto (Poder).
-- **Vara:** jato de água que voa até o inimigo (Inteligência).
+- **Vara:** jato de água que voa até o inimigo (Inteligência). Com o Feitiço dos Duendes, vira um
+  veneno que não machuca no contato e tira vida por 3 s (no total, 1,5 vez o dano da água).
 - **Escudo ou nada na mão:** socos (Poder).
 
 O **veneno** do duende mágico não causa dano no contato: tira 1 de vida por segundo durante 3 s
@@ -118,7 +144,7 @@ barra de vida e no painel do personagem.
 
 | | Vida | Poder | Velocidade | Defesa | Inteligência |
 | --- | --- | --- | --- | --- | --- |
-| Base | 10 | 5 | 25 | 5 | 5 |
+| Base | 10 | 8 | 25 | 5 | 5 |
 | Espada | | +15 | | | |
 | Vara | +5 | | | | +10 |
 | Escudo | | | −3 | +15 | |

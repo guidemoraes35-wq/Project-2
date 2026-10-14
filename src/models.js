@@ -810,16 +810,59 @@ function cabeloAfro(cabeca, R, mat) {
   }
 }
 
-function criarEspada(metal, ouro, couro) {
+const ehEspada = (id) => id === 'espada' || id === 'espadaDuendeira';
+
+/** Feitiço dos Duendes: uma bolha de veneno verde girando sobre a palma da mão. */
+function criarFeitico() {
+  const g = new THREE.Group();
+  const orbe = new THREE.Mesh(new THREE.SphereGeometry(0.075, 14, 10), new THREE.MeshStandardMaterial({ color: 0xa8ff6a, emissive: 0x4ad02a, emissiveIntensity: 2.2, transparent: true, opacity: 0.85 }));
+  g.add(orbe);
+  for (let i = 0; i < 3; i++) {
+    const anel = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.008, 6, 20), new THREE.MeshBasicMaterial({ color: 0x7dff4a }));
+    anel.rotation.set(i * 1.1, i * 0.7, 0);
+    g.add(anel);
+  }
+  const brilho = new THREE.Sprite(new THREE.SpriteMaterial({ map: texturaBrilho('rgba(120,255,60,1)'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.8 }));
+  brilho.scale.setScalar(0.45);
+  g.add(brilho);
+  g.position.set(0, -0.02, 0.1);
+  return g;
+}
+
+/** Gorro dos Gnomos: o chapéu de cone vermelho com a ponta caída, do tamanho de um humano. */
+function criarGorro(escala = 1.05) {
+  const vermelho = toon(0xd02a26);
+  const g = grupo(0, 0.1 * escala, -0.02);
+  g.rotation.x = -0.15;
+  g.scale.setScalar(escala);
+  g.add(parte(G.cil(0.235, 0.26, 0.06, 20), vermelho, { p: [0, 0.03, 0] }));
+  g.add(parte(G.cil(0.1, 0.22, 0.34, 20), vermelho, { p: [0, 0.22, 0] }));
+  const ponta = grupo(0, 0.38, 0);
+  ponta.rotation.x = -0.6;
+  ponta.add(parte(G.cone(0.1, 0.32, 14), vermelho, { p: [0, 0.15, 0] }));
+  ponta.add(parte(G.esferaB, toon(0xf6f4ee), { p: [0, 0.32, 0], s: 0.05 }));
+  g.add(ponta);
+  return g;
+}
+
+/** Espada; a `duendeira` tem a lâmina verde e serrilhada, como as armas dos duendes. */
+function criarEspada(metal, ouro, couro, duendeira = false) {
   const g = new THREE.Group();
   g.add(parte(G.cil(0.024, 0.026, 0.17, 8), couro, { contorno: false }));
   g.add(parte(G.esferaB, ouro, { p: [0, -0.1, 0], s: 0.038 }));
   g.add(parte(G.capsula(0.025, 0.22), ouro, { p: [0, 0.095, 0], r: [0, 0, Math.PI / 2] }));
   const forma = new THREE.Shape();
   forma.moveTo(-0.042, 0);
-  forma.lineTo(-0.036, 0.6);
-  forma.lineTo(0, 0.72);
-  forma.lineTo(0.036, 0.6);
+  if (duendeira) {
+    // fio serrilhado dos dois lados
+    for (let i = 1; i <= 5; i++) forma.lineTo(i % 2 ? -0.06 : -0.04, i * 0.12);
+    forma.lineTo(0, 0.78);
+    for (let i = 5; i >= 1; i--) forma.lineTo(i % 2 ? 0.06 : 0.04, i * 0.12);
+  } else {
+    forma.lineTo(-0.036, 0.6);
+    forma.lineTo(0, 0.72);
+    forma.lineTo(0.036, 0.6);
+  }
   forma.lineTo(0.042, 0);
   forma.lineTo(-0.042, 0);
   const lamina = new THREE.ExtrudeGeometry(forma, { depth: 0.012, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.006, bevelSegments: 1 });
@@ -882,15 +925,15 @@ function criarEscudo(corFrente, corFaixa, metal, madeira, duendeiro = false) {
  * Personagem definitivo do jogador, montado na tela de criação.
  * op: { genero: 'menino' | 'menina', aparencia, roupa (de config.js), item: 'espada' | 'vara' | 'escudo' | null }
  */
-export function criarHeroi({ genero, aparencia, roupa, item = null, itens = null }) {
+export function criarHeroi({ genero, aparencia, roupa, item = null, equipamento = null }) {
   const rig = baseRig('heroi');
   const { corpo } = rig;
   const menina = genero === 'menina';
-  // até dois itens: o escudo vai no braço esquerdo; espada e vara preferem a mão direita
-  const lista = (itens || (item ? [item] : [])).slice(0, 2);
-  const ehEscudo = (id) => id?.startsWith('escudo');
-  rig.maoD = lista.find((i) => !ehEscudo(i)) || null;
-  rig.maoE = lista.find((i) => i !== rig.maoD) || null;
+  // equipamento: { cabeca, maoD, maoE, ... }; na criação, só o presente (escudo na esquerda)
+  const eq = equipamento || (item?.startsWith('escudo') ? { maoE: item } : { maoD: item });
+  const ehEscudo = (id) => !!id?.startsWith('escudo');
+  rig.maoD = eq.maoD || null;
+  rig.maoE = eq.maoE || null;
   rig.escudoE = ehEscudo(rig.maoE);
   const pele = toon(aparencia.pele);
   const cabelo = toon(aparencia.cabelo);
@@ -1013,12 +1056,15 @@ export function criarHeroi({ genero, aparencia, roupa, item = null, itens = null
   // itens nas mãos
   const montar = (id, b) => {
     if (id === 'espada') b.mao.add(criarEspada(metal, ouro, couro));
+    else if (id === 'espadaDuendeira') b.mao.add(criarEspada(toon(0x9adf7a, { emissive: 0x1f5a14, emissiveIntensity: 0.6 }), toon(0x3a6a2a), toon(0x2a1a10), true));
+    else if (id === 'feiticoDuendes') b.mao.add((rig.feitico = criarFeitico()));
     else if (id === 'vara') b.mao.add(criarVara(couro, metal));
     else if (id === 'escudo') b.pivo.userData.cotovelo.add(criarEscudo(roupa.principal, roupa.detalhe, metal, toon(0x7a5230)));
     else if (id === 'escudoDuendeiro') b.pivo.userData.cotovelo.add(criarEscudo(0, 0, metal, toon(0x4a3a20), true));
   };
   montar(rig.maoD, bd);
   montar(rig.maoE, be);
+  if (eq.cabeca === 'gorroGnomos') cabeca.add(criarGorro(aparencia.cacheado && menina ? 1.3 : aparencia.cacheado ? 1.08 : 1.05));
 
   rig.bracoE = be.pivo;
   rig.bracoD = bd.pivo;
@@ -1236,7 +1282,7 @@ export function animarRig(rig, dt, t, andar, ataque = -1) {
     if (rig.maoD === 'vara') {
       rig.bracoD.rotation.x = -0.3 + s * 0.12 * andar;
       rig.bracoD.rotation.z = -0.12;
-    } else if (rig.maoD === 'espada') {
+    } else if (ehEspada(rig.maoD)) {
       rig.bracoD.rotation.x = -0.15 + s * 0.35 * andar;
     }
     if (rig.escudoE) {
@@ -1246,9 +1292,15 @@ export function animarRig(rig, dt, t, andar, ataque = -1) {
     } else if (rig.maoE === 'vara') {
       rig.bracoE.rotation.x = -0.3 - s * 0.12 * andar;
       rig.bracoE.rotation.z = 0.12;
-    } else if (rig.maoE === 'espada') {
+    } else if (ehEspada(rig.maoE)) {
       rig.bracoE.rotation.x = -0.15 - s * 0.35 * andar;
+    } else if (rig.maoE === 'feiticoDuendes') {
+      // segura o feitiço à frente, na palma da mão
+      rig.bracoE.rotation.x = -0.6 - s * 0.08 * andar;
+      rig.bracoE.rotation.z = 0.1;
+      if (cotE) cotE.rotation.x = -0.9;
     }
+    if (rig.feitico) rig.feitico.rotation.y = t * 2;
   }
 
   if (ataque < 0) return;
@@ -1281,7 +1333,7 @@ export function animarRig(rig, dt, t, andar, ataque = -1) {
       const solta = suave(Math.max(0, Math.min(1, (p - 0.35) / 0.2)));
       rig.bracoD.rotation.x = -0.3 - 1.2 * sobe - 0.5 * solta + suave(Math.max(0, (p - 0.7) / 0.3)) * 1.2;
       rig.corpo.rotation.x = -0.08 * sobe + solta * 0.12;
-    } else if (rig.maoD !== 'espada') {
+    } else if (!ehEspada(rig.maoD)) {
       // soco: puxa o braço e estica rápido para frente
       const puxa = suave(Math.min(1, p / 0.3));
       const estica = suave(Math.max(0, Math.min(1, (p - 0.3) / 0.15)));

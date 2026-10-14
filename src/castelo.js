@@ -124,7 +124,7 @@ export function criarCastelo() {
   // regiões onde se anda: pátio, passagem pela fortaleza, labirinto, saída e sala do tesouro
   const ZONAS = [
     { x0: X0, x1: X1, z0: Z0, z1: Z1 },
-    { x0: -2.5, x1: 2.5, z0: -61, z1: -46 },
+    { x0: -3.4, x1: 3.4, z0: -61, z1: -46 },
     { x0: -24.1, x1: 24.1, z0: -101.6, z1: -60.4 },
     { x0: -3.4, x1: 3.4, z0: -103.2, z1: -101 },
     { x0: -15, x1: 15, z0: -130.5, z1: -102.6 },
@@ -189,8 +189,8 @@ export function criarCastelo() {
   const W = 24, N = -58, S = 7;
   muro(-W, S, -W, N);
   muro(W, S, W, N);
-  muro(-W, N, -2.5, N);
-  muro(2.5, N, W, N);
+  muro(-W, N, -3.5, N);
+  muro(3.5, N, W, N);
   muro(-W, S, -3.5, S);
   muro(3.5, S, W, S);
   const imAmeias = new THREE.InstancedMesh(new THREE.BoxGeometry(espessura + 0.1, 1, 0.8), M.pedra, ameias.length);
@@ -220,26 +220,27 @@ export function criarCastelo() {
 
   // ---------- Fortaleza no fundo ----------
   const fz = -51;
-  // dois blocos dos lados de uma passagem em arco que atravessa a fortaleza até o labirinto
-  for (const s of [-1, 1]) adicionar(new THREE.BoxGeometry(7.5, 12, 10), M.pedraEscura, s * 6.25, 6, fz - 1);
-  adicionar(new THREE.BoxGeometry(5, 7, 10), M.pedraEscura, 0, 8.5, fz - 1);
-  adicionar(new THREE.BoxGeometry(21, 1, 11), M.pedra, 0, 12.3, fz - 1);
-  adicionar(new THREE.BoxGeometry(5, 0.05, 12), M.pedraEscura, 0, 0.03, fz - 1).receiveShadow = true;
+  // a fortaleza é dividida por uma passagem aberta (sem teto), da largura de um corredor
+  // do labirinto, que leva direto à entrada dele
+  for (const s of [-1, 1]) {
+    adicionar(new THREE.BoxGeometry(6.5, 12, 10), M.pedraEscura, s * 6.75, 6, fz - 1);
+    adicionar(new THREE.BoxGeometry(7, 1, 11), M.pedra, s * 6.75, 12.3, fz - 1);
+  }
+  const lajePassagem = adicionar(new THREE.BoxGeometry(7, 0.05, 15), M.pedraEscura, 0, 0.03, fz - 3.5);
+  lajePassagem.receiveShadow = true;
   for (const s of [-1, 1]) {
     adicionar(new THREE.CylinderGeometry(2.6, 2.8, 17, 12), M.pedraEscura, s * 10, 8.5, fz + 3);
     adicionar(new THREE.ConeGeometry(3.3, 5, 12), M.telhado, s * 10, 19.5, fz + 3);
   }
-  adicionar(new THREE.CylinderGeometry(3.2, 3.4, 10, 12), M.pedra, 0, 17.8, fz - 3);
-  adicionar(new THREE.ConeGeometry(4, 6, 12), M.telhado, 0, 25.8, fz - 3);
-  // arco da passagem
-  adicionar(new THREE.TorusGeometry(2.5, 0.35, 8, 16, Math.PI), M.pedra, 0, 4.9, fz + 4.1);
+  // arcos na frente e atrás da passagem, com tochas
+  for (const z of [fz + 4.1, fz - 6.1]) adicionar(new THREE.TorusGeometry(3.5, 0.4, 8, 18, Math.PI), M.pedra, 0, 5.6, z);
   for (const s of [-1, 1]) {
     // estandartes verdes com uma caveira de duende pintada
     const est = adicionar(new THREE.PlaneGeometry(2, 5), M.bandeira, s * 5, 7, fz + 4.05);
     est.userData.bandeira = true;
     adicionar(new THREE.SphereGeometry(0.45, 10, 8), new THREE.MeshStandardMaterial({ color: 0xe8e0c8 }), s * 5, 7.6, fz + 4.12).scale.z = 0.2;
   }
-  for (const s of [-1, 1]) addCaixa(s * 6.25, fz - 1, 3.75, 5.2);
+  for (const s of [-1, 1]) addCaixa(s * 6.75, fz - 1, 3.25, 5.2);
   for (const s of [-1, 1]) addCirculo(s * 10, fz + 3, 3);
 
   // ---------- Pátio: fogueira, tendas, barricadas, caixotes e braseiros ----------
@@ -270,7 +271,7 @@ export function criarCastelo() {
 
   // barricadas de estacas pontudas
   const geoEstaca = new THREE.ConeGeometry(0.14, 1.6, 6);
-  for (const [x, z, ang, comp] of [[-7, -8, 0.3, 4], [8, -10, -0.4, 5], [-9, -34, -0.2, 5], [9, -30, 0.5, 4], [0, -38, 0, 6]]) {
+  for (const [x, z, ang, comp] of [[-7, -8, 0.3, 4], [8, -10, -0.4, 5], [-9, -34, -0.2, 5], [9, -30, 0.5, 4]]) {
     for (let d = -comp / 2; d <= comp / 2; d += 0.35) {
       const px = x + Math.cos(ang) * d, pz = z - Math.sin(ang) * d;
       const est = adicionar(geoEstaca, M.madeira, px, 0.7, pz);
@@ -454,7 +455,17 @@ export function criarCastelo() {
   adicionar(new THREE.BoxGeometry(esp, 6, RZ0 - RZ1), matSala, -RX, 3, (RZ0 + RZ1) / 2);
   adicionar(new THREE.BoxGeometry(esp, 6, RZ0 - RZ1), matSala, RX, 3, (RZ0 + RZ1) / 2);
   adicionar(new THREE.BoxGeometry(RX * 2 + esp, 6, esp), matSala, 0, 3, RZ1);
-  for (const s of [-1, 1]) adicionar(new THREE.BoxGeometry(RX - 3.5, 6, esp), matSala, s * (3.5 + (RX - 3.5) / 2), 3, RZ0 - 0.4);
+  // entrada da sala: colunas douradas, arco e tochas, logo na saída do labirinto
+  const ouroPortal = new THREE.MeshStandardMaterial({ color: 0xf0c040, roughness: 0.35, metalness: 0.8, emissive: 0x3a2a08 });
+  for (const s of [-1, 1]) {
+    adicionar(new THREE.CylinderGeometry(0.45, 0.5, 4.4, 12), ouroPortal, s * 4.1, 2.2, RZ0);
+    adicionar(new THREE.SphereGeometry(0.5, 12, 8), ouroPortal, s * 4.1, 4.6, RZ0);
+    const f = new THREE.Sprite(new THREE.SpriteMaterial({ map: texturaBrilho('rgba(255,140,40,1)'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+    f.position.set(s * 4.1, 5.3, RZ0);
+    scene.add(f);
+    fontes.push({ x: s * 4.1, y: 5.3, z: RZ0, base: 24, fogo: f, tocha: true });
+  }
+  adicionar(new THREE.TorusGeometry(4.1, 0.3, 8, 20, Math.PI), ouroPortal, 0, 4.4, RZ0);
   const texSala = texturaPedra();
   texSala.repeat.set(8, 8);
   const chaoSala = new THREE.Mesh(new THREE.PlaneGeometry(RX * 2, RZ0 - RZ1).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x8a6a4a, map: texSala, roughness: 0.7 }));
@@ -623,8 +634,15 @@ export function criarCastelo() {
     inicio: { x: 0, z: 1.5, dir: Math.PI },
     /** Centro da sala do tesouro: a Princesa Duendete e, depois, o portal de volta. */
     centroSala: { x: 0, z: -117 },
-    /** true dentro dos corredores do labirinto. */
-    noLabirinto: (z) => z < -59 && z > -102.5,
+    /**
+     * Inclinação mínima da câmera: livre no pátio, sobe aos poucos na passagem para olhar por
+     * cima das paredes do labirinto e baixa um pouco ao entrar na sala do tesouro.
+     */
+    pitchMinimo(z) {
+      const labirinto = suave((-z - 44) / 14);   // de z = -44 a -58
+      const sala = suave((-z - 100) / 6);        // de z = -100 a -106
+      return 0.08 + (0.85 - 0.08) * labirinto + (0.55 - 0.85) * sala;
+    },
     /** true se o ponto está dentro da sala do tesouro. */
     naSala: (x, z) => z < -102.6 && Math.abs(x) < 15,
     bau,

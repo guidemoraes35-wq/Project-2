@@ -242,9 +242,9 @@ export function criarPovoGnomo(ctx) {
    * Retorna quantos foram atingidos.
    */
   /** Golpe no Rei Gnomo: ele fica bravo e revida. */
-  function ferirRei(ataque, origem) {
+  function ferirRei(ataque, origem, extra = 0, danoFixo = null) {
     if (chefe.morto) return;
-    const dano = calcularDano(ataque, GNOMO_CHEFE.defesa);
+    const dano = danoFixo ?? calcularDano(ataque, GNOMO_CHEFE.defesa) + extra;
     chefe.hp -= dano;
     chefe.flash = 0.15;
     tmp.copy(chefe.pos).setY(2.1);
@@ -273,19 +273,62 @@ export function criarPovoGnomo(ctx) {
     }
   }
 
+  /** Veneno do herói: `total` de dano dividido em `duracao` s. */
+  function envenenar(alvo, ataque, duracao, multiplicador) {
+    if (alvo.morto) return;
+    const def = alvo === chefe ? GNOMO_CHEFE.defesa : GNOMO.defesa;
+    alvo.veneno = { porSegundo: Math.max(1, Math.round((calcularDano(ataque, def) * multiplicador) / duracao)), restante: duracao, t: 0 };
+    if (alvo === chefe) {
+      if (!chefe.bravo) expressar('bravo');
+      chefe.bravo = true;
+      chefe.raiva = GNOMO.raiva;
+    } else {
+      ficarBravo(alvo);
+      alertarVizinhos(alvo.pos);
+    }
+    tmp.copy(alvo.pos).setY(0.9);
+    particulas.emitir(tmp, 0x8aff4a, 30, { vel: 3, vida: 0.7 });
+  }
+
+  function atualizarVenenoGnomo(g, dt) {
+    if (!g.veneno || g.morto) return;
+    g.veneno.t += dt;
+    while (g.veneno && g.veneno.t >= 1) {
+      g.veneno.t -= 1;
+      g.veneno.restante -= 1;
+      const dano = g.veneno.porSegundo;
+      if (g === chefe) ferirRei(0, g.pos, 0, dano);
+      else {
+        g.hp -= dano;
+        g.flash = 0.15;
+        g.barra.visible = true;
+        tmp.copy(g.pos).setY(1.25);
+        numeros.mostrar(tmp, dano, 'veneno');
+        if (g.hp <= 0) {
+          g.morto = true;
+          g.barra.visible = false;
+          renascer.push(GNOMO.renascer);
+          ctx.aoMorrer?.(g);
+        }
+      }
+      if (g.morto || g.veneno.restante <= 0) g.veneno = null;
+    }
+  }
+
   function alertarVizinhos(origem) {
     for (const g of gnomos) {
       if (!g.morto && !g.bravo && distXZ(g.pos, origem) < GNOMO.raioAlerta) ficarBravo(g);
     }
   }
 
-  function atacar(origem, dir, alcance, arco, ataque) {
+  /** Golpe em área à frente do herói; `extra` é somado ao dano (Espada Duendeira). */
+  function atacar(origem, dir, alcance, arco, ataque, extra = 0) {
     let acertos = 0;
     if (!chefe.morto) {
       const d = distXZ(chefe.pos, origem);
       const ang = Math.atan2(chefe.pos.x - origem.x, chefe.pos.z - origem.z);
       if (d < alcance + 0.45 && (d < 0.6 || Math.abs(difAngulo(dir, ang)) <= arco / 2)) {
-        ferirRei(ataque, origem);
+        ferirRei(ataque, origem, extra);
         acertos++;
       }
     }
@@ -295,7 +338,7 @@ export function criarPovoGnomo(ctx) {
       if (d > alcance + GNOMO.raio) continue;
       const ang = Math.atan2(g.pos.x - origem.x, g.pos.z - origem.z);
       if (d > 0.6 && Math.abs(difAngulo(dir, ang)) > arco / 2) continue;
-      ferir(g, calcularDano(ataque, GNOMO.defesa), origem);
+      ferir(g, calcularDano(ataque, GNOMO.defesa) + extra, origem);
       acertos++;
     }
     // os vizinhos viram a briga e também ficam bravos
@@ -390,6 +433,7 @@ export function criarPovoGnomo(ctx) {
   // ---------- Comportamento ----------
   function atualizarGnomo(g, dt, t, heroi) {
     const rig = g.rig;
+    atualizarVenenoGnomo(g, dt);
     if (g.morto) {
       g.mortoT += dt;
       rig.root.rotation.x = Math.max(-Math.PI / 2, rig.root.rotation.x - dt * 6);
@@ -560,6 +604,7 @@ export function criarPovoGnomo(ctx) {
 
   function atualizarRei(dt, t, heroi) {
     const r = chefe.rig;
+    atualizarVenenoGnomo(chefe, dt);
     if (chefe.morto) {
       // cai, some e, depois de um tempo, volta para a praça
       chefe.mortoT += dt;
@@ -613,6 +658,7 @@ export function criarPovoGnomo(ctx) {
     expressar,
     raioMortal,
     atingir,
+    envenenar,
     /** Gnomos vivos e o rei (para a mira automática e o jato de água). */
     alvos: () => [...gnomos.filter((g) => !g.morto), ...(chefe.morto ? [] : [chefe])],
   };

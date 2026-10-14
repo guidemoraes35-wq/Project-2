@@ -102,18 +102,21 @@ export function criarDuendesCastelo(ctx) {
     }
   }
 
-  function ferir(d, dano, origem) {
+  /** `veneno`: dano do veneno (sem empurrão e sem interromper o ataque). */
+  function ferir(d, dano, origem, veneno = false) {
     d.hp -= dano;
     d.flash = 0.15;
-    tmp.subVectors(d.pos, origem).setY(0).normalize().multiplyScalar(6);
-    d.empurrao.copy(tmp);
-    if (d !== princesa) {
-      d.ataqueT = -1;
-      d.recarga = Math.max(d.recarga, 0.4);
+    if (!veneno) {
+      tmp.subVectors(d.pos, origem).setY(0).normalize().multiplyScalar(6);
+      d.empurrao.copy(tmp);
+      if (d !== princesa) {
+        d.ataqueT = -1;
+        d.recarga = Math.max(d.recarga, 0.4);
+      }
     }
     tmp.copy(d.pos).setY(d.cfg.alturaAcerto + 0.6);
-    numeros.mostrar(tmp, dano, 'inimigo');
-    particulas.emitir(tmp, 0xff4433, 12, { vel: 3.5, vida: 0.5, gravidade: 9 });
+    numeros.mostrar(tmp, dano, veneno ? 'veneno' : 'inimigo');
+    if (!veneno) particulas.emitir(tmp, 0xff4433, 12, { vel: 3.5, vida: 0.5, gravidade: 9 });
     d.barra.visible = d !== princesa;
     d.alerta = true;
     if (d === princesa) ctx.aoFerirPrincesa?.(d);
@@ -143,7 +146,8 @@ export function criarDuendesCastelo(ctx) {
     if (princesa && !princesa.morto) morrer(princesa);
   }
 
-  function atacar(origem, dir, alcance, arco, ataque) {
+  /** Golpe em área à frente do herói; `extra` é somado ao dano (Espada Duendeira). */
+  function atacar(origem, dir, alcance, arco, ataque, extra = 0) {
     let acertos = 0;
     for (const d of duendes) {
       if (d.morto || d.morrendo) continue;
@@ -151,7 +155,7 @@ export function criarDuendesCastelo(ctx) {
       if (dist > alcance + d.cfg.raio) continue;
       const ang = Math.atan2(d.pos.x - origem.x, d.pos.z - origem.z);
       if (dist > 0.6 && Math.abs(difAngulo(dir, ang)) > arco / 2) continue;
-      ferir(d, calcularDano(ataque, d.cfg.defesa), origem);
+      ferir(d, calcularDano(ataque, d.cfg.defesa) + extra, origem);
       acertos++;
     }
     return acertos;
@@ -160,6 +164,31 @@ export function criarDuendesCastelo(ctx) {
   /** Um golpe que já escolheu o alvo (o jato de água da vara). */
   function atingir(d, ataque, origem) {
     if (!d.morto && !d.morrendo) ferir(d, calcularDano(ataque, d.cfg.defesa), origem);
+  }
+
+  /** Veneno do herói (vara + Feitiço dos Duendes): `total` de dano dividido em `duracao` s. */
+  function envenenar(d, ataque, duracao, multiplicador) {
+    if (d.morto || d.morrendo) return;
+    const total = calcularDano(ataque, d.cfg.defesa) * multiplicador;
+    d.veneno = { porSegundo: Math.max(1, Math.round(total / duracao)), restante: duracao, t: 0 };
+    d.alerta = true;
+    tmp.copy(d.pos).setY(d.cfg.alturaAcerto + 0.4);
+    particulas.emitir(tmp, 0x8aff4a, 30, { vel: 3, vida: 0.7 });
+  }
+
+  function atualizarVenenoDuende(d, dt) {
+    if (!d.veneno || d.morto || d.morrendo) return;
+    d.veneno.t += dt;
+    if (Math.random() < 0.3) {
+      tmp.set(d.pos.x + (Math.random() - 0.5) * 0.4, 0.4 + Math.random() * 0.8, d.pos.z + (Math.random() - 0.5) * 0.4);
+      particulas.emitir(tmp, 0x7dff3a, 1, { vel: 0.4, vida: 0.6, subir: 1 });
+    }
+    while (d.veneno && d.veneno.t >= 1) {
+      d.veneno.t -= 1;
+      d.veneno.restante -= 1;
+      ferir(d, d.veneno.porSegundo, d.pos, true);
+      if (d.morto || d.morrendo || d.veneno.restante <= 0) d.veneno = null;
+    }
   }
 
   // ---------- Princesa Duendete: chama duendes fracos a cada 5 s ----------
@@ -364,6 +393,7 @@ export function criarDuendesCastelo(ctx) {
     animarRig(rig, dt, t, d.andar, d.ataqueT >= 0 ? d.ataqueT / duracao : -1);
     if (rig.orbe) rig.orbe.material.emissiveIntensity = 1.6 + Math.sin(t * 6 + d.desvio * 4) * 0.6;
     if (d.morrendo) poseMorrendo(d, dt, t);
+    atualizarVenenoDuende(d, dt);
     d.flash = Math.max(0, d.flash - dt);
     rig.pele.emissive.setRGB(d.flash > 0 ? 1 : 0, d.flash > 0 ? 0.25 : 0, d.flash > 0 ? 0.2 : 0);
     d.barra.position.set(d.pos.x, 1.35, d.pos.z);
@@ -417,6 +447,7 @@ export function criarDuendesCastelo(ctx) {
     atualizar,
     atacar,
     atingir,
+    envenenar,
     acalmar,
     princesa: () => princesa,
     alvos: () => duendes.filter((d) => !d.morto && !d.morrendo),
