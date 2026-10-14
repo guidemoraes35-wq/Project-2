@@ -5,7 +5,7 @@ import { texturaBrilho } from './world.js';
 
 // ------------------------------------------------------------------ Materiais
 const gradiente = (() => {
-  const t = new THREE.DataTexture(new Uint8Array([70, 140, 205, 255]), 4, 1, THREE.RedFormat);
+  const t = new THREE.DataTexture(new Uint8Array([62, 112, 160, 210, 255]), 5, 1, THREE.RedFormat);
   t.minFilter = t.magFilter = THREE.NearestFilter;
   t.generateMipmaps = false;
   t.needsUpdate = true;
@@ -69,7 +69,7 @@ function grupo(x = 0, y = 0, z = 0) {
 
 // ------------------------------------------------------------------ Geometrias
 const G = {
-  esfera: new THREE.SphereGeometry(1, 20, 16),
+  esfera: new THREE.SphereGeometry(1, 28, 20),
   esferaB: new THREE.SphereGeometry(1, 10, 8),
   capsula: (r, c) => new THREE.CapsuleGeometry(r, c, 6, 12),
   cone: (r, h, s = 12) => new THREE.ConeGeometry(r, h, s),
@@ -120,25 +120,54 @@ function baseRig(tipo) {
   return { tipo, root, corpo, fase: 0 };
 }
 
-/** Perna com pivô no quadril: coxa/canela em cápsula e bota arredondada. */
-function perna(x, quadril, comp, raio, matPerna, matBota, tamBota = 1) {
+const matSola = toon(0x16110c);
+
+/**
+ * Perna com pivô no quadril e joelho articulado: coxa e canela em cápsulas, joelheira
+ * arredondada e bota com sola (ou pé descalço com `descalco`). O joelho fica em
+ * `perna.userData.joelho` para a animação dobrá-lo ao andar.
+ */
+function perna(x, quadril, comp, raio, matPerna, matBota, tamBota = 1, { descalco = false } = {}) {
   const p = grupo(x, quadril, 0);
-  p.add(parte(G.capsula(raio, comp - raio * 2), matPerna, { p: [0, -comp / 2 + 0.02, 0] }));
-  p.add(parte(G.esfera, matBota, {
-    p: [0, -quadril + 0.07 * tamBota, 0.05 * tamBota],
-    s: [0.1 * tamBota, 0.08 * tamBota, 0.17 * tamBota],
-  }));
-  p.add(parte(G.cil(raio * 1.25, raio * 1.35, 0.16), matBota, { p: [0, -quadril + 0.16 * tamBota, 0] }));
+  const meio = quadril * 0.5;
+  p.add(parte(G.capsula(raio, Math.max(0.01, meio - raio)), matPerna, { p: [0, -meio / 2, 0] }));
+  const joelho = grupo(0, -meio, 0);
+  joelho.add(parte(G.esfera, matPerna, { s: raio * 1.02, contorno: false }));
+  joelho.add(parte(G.capsula(raio * 0.88, Math.max(0.01, meio - raio * 1.4)), matPerna, { p: [0, -meio / 2 + 0.01, 0] }));
+  const yPe = -(quadril - meio) + 0.07 * tamBota;
+  joelho.add(parte(G.esfera, matBota, { p: [0, yPe, 0.05 * tamBota], s: [0.1 * tamBota, 0.08 * tamBota, 0.17 * tamBota] }));
+  if (!descalco) {
+    // cano da bota e sola
+    joelho.add(parte(G.cil(raio * 1.18, raio * 1.32, 0.2 * tamBota, 16), matBota, { p: [0, yPe + 0.11 * tamBota, 0] }));
+    joelho.add(parte(G.cil(raio * 1.35, raio * 1.35, 0.03, 16), matBota, { p: [0, yPe + 0.21 * tamBota, 0], contorno: false }));
+    joelho.add(parte(G.esfera, matSola, { p: [0, yPe - 0.05 * tamBota, 0.05 * tamBota], s: [0.105 * tamBota, 0.03 * tamBota, 0.18 * tamBota], contorno: false }));
+  }
+  p.add(joelho);
+  p.userData.joelho = joelho;
   return p;
 }
 
-/** Braço com pivô no ombro. Retorna { pivo, mao } (a mão é um grupo para segurar armas). */
+/**
+ * Braço com pivô no ombro e cotovelo articulado. A mão é uma luva arredondada com
+ * polegar. Retorna { pivo, mao } (a mão é um grupo para segurar armas); o cotovelo
+ * fica em `pivo.userData.cotovelo`.
+ */
 function braco(x, ombro, comp, raio, matBraco, matMao, raioMao) {
   const pivo = grupo(x, ombro, 0);
-  pivo.add(parte(G.capsula(raio, comp - raio * 2), matBraco, { p: [0, -comp / 2, 0] }));
-  const mao = grupo(0, -comp - raioMao * 0.6, 0);
-  mao.add(parte(G.esfera, matMao, { s: [raioMao, raioMao * 1.05, raioMao * 0.9] }));
-  pivo.add(mao);
+  const meio = comp * 0.5;
+  pivo.add(parte(G.capsula(raio, Math.max(0.01, meio - raio)), matBraco, { p: [0, -meio / 2, 0] }));
+  const cotovelo = grupo(0, -meio, 0);
+  cotovelo.add(parte(G.esfera, matBraco, { s: raio * 0.98, contorno: false }));
+  cotovelo.add(parte(G.capsula(raio * 0.9, Math.max(0.01, meio - raio)), matBraco, { p: [0, -meio / 2, 0] }));
+  const mao = grupo(0, -meio - raioMao * 0.6, 0);
+  mao.add(parte(G.esfera, matMao, { s: [raioMao, raioMao * 1.1, raioMao * 0.85] }));
+  const lado = x > 0 ? -1 : 1; // polegar do lado de dentro, apontando para frente
+  mao.add(parte(G.capsula(raioMao * 0.32, raioMao * 0.5), matMao, {
+    p: [lado * raioMao * 0.55, raioMao * 0.15, raioMao * 0.55], r: [-0.9, 0, lado * 0.5], contorno: false,
+  }));
+  cotovelo.add(mao);
+  pivo.add(cotovelo);
+  pivo.userData.cotovelo = cotovelo;
   return { pivo, mao };
 }
 
@@ -192,6 +221,12 @@ export function criarAssassino() {
   cabeca.add(sobrancelha(-0.085, 0.115, R * 0.9, 0.06, -0.35, sob));
   corpo.add(cabeca);
   rig.cabeca = cabeca;
+
+  // bolsinhas no cinto, bainha de faca nas costas e tira de couro na coxa
+  for (const x of [0.17, -0.17]) corpo.add(parte(G.capsula(0.045, 0.05), couroEscuro, { p: [x, 0.9, 0.13], s: [1.25, 1, 0.75] }));
+  corpo.add(parte(G.capsula(0.038, 0.3), couroEscuro, { p: [0.07, 1.2, -0.2], r: [0, 0, 0.6] }));
+  corpo.add(parte(G.capsula(0.022, 0.08), toon(0x3b2414), { p: [0.2, 1.39, -0.2], r: [0, 0, 0.6], contorno: false }));
+  rig.pernaE.add(parte(G.toro(0.092, 0.016), couroEscuro, { p: [0, -0.22, 0], r: [Math.PI / 2, 0, 0], contorno: false }));
 
   // capa curta presa nos ombros
   rig.capa = grupo(0, 1.5, -0.1);
@@ -249,13 +284,31 @@ export function criarMaga() {
   rig.saia = grupo(0, 1.12, 0);
   rig.saia.add(parte(G.torno([[0, -0.9], [0.52, -0.9], [0.47, -0.82], [0.33, -0.55], [0.24, -0.25], [0.19, 0], [0, 0]], 24), roxo));
   rig.saia.add(parte(G.toro(0.505, 0.03), ouro, { p: [0, -0.88, 0], r: [Math.PI / 2, 0, 0], contorno: false }));
+  // anágua mais escura aparecendo na barra, com bordas onduladas
+  const anagua = G.torno([[0, -0.95], [0.56, -0.95], [0.52, -0.86], [0.32, -0.45], [0, -0.45]], 30);
+  {
+    const pos = anagua.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      if (pos.getY(i) < -0.9) pos.setY(i, pos.getY(i) + Math.max(0, Math.sin(Math.atan2(pos.getZ(i), pos.getX(i)) * 9)) * 0.04);
+    }
+    anagua.computeVertexNormals();
+  }
+  rig.saia.add(parte(anagua, roxoEscuro));
+  // estrelinhas douradas bordadas na saia
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2 + 0.3;
+    const y = -0.45 - (i % 3) * 0.14;
+    const r = 0.24 + (-y - 0.25) * 0.37 + 0.012;
+    rig.saia.add(parte(G.esferaB, ouro, { p: [Math.sin(a) * r, y, Math.cos(a) * r], s: 0.022, contorno: false, sombra: false }));
+  }
   corpo.add(rig.saia);
   // corpete
   corpo.add(parte(G.torno([[0, 0], [0.19, 0], [0.17, 0.15], [0.21, 0.32], [0.2, 0.42], [0.1, 0.48], [0, 0.49]]), roxo, { p: [0, 1.08, 0], s: [1, 1, 0.8] }));
   corpo.add(parte(G.toro(0.18, 0.03), ouro, { p: [0, 1.13, 0], r: [Math.PI / 2, 0, 0], s: [1, 0.8, 1], contorno: false }));
   corpo.add(parte(G.esferaB, toon(0x5fd6ff, { emissive: 0x2a9fd6, emissiveIntensity: 0.8 }), { p: [0, 1.13, 0.15], s: 0.04, contorno: false }));
-  // gola
+  // gola e capinha sobre os ombros
   corpo.add(parte(G.cil(0.2, 0.13, 0.08, 16), roxoEscuro, { p: [0, 1.52, 0] }));
+  corpo.add(parte(G.cil(0.17, 0.35, 0.2, 24, true), toon(0x3b2177, { side: THREE.DoubleSide }), { p: [0, 1.42, 0], s: [1, 1, 0.85] }));
 
   // cabeça
   const R = 0.24;
@@ -283,6 +336,10 @@ export function criarMaga() {
   }
   cabeca.add(parte(G.capsula(0.055, 0.3), cabelo, { p: [0.21, -0.2, 0.03] }));
   cabeca.add(parte(G.capsula(0.055, 0.3), cabelo, { p: [-0.21, -0.2, 0.03] }));
+  // mechas soltas nas costas
+  for (const [x, rz] of [[0.12, 0.08], [-0.12, -0.08], [0, 0]]) {
+    cabeca.add(parte(G.capsula(0.06, 0.34), cabelo, { p: [x, -0.45, -0.17], r: [0.15, 0, rz] }));
+  }
   // chapéu de bruxa com a ponta dobrada
   const chapeu = grupo(0, 0.17, -0.02);
   chapeu.add(parte(G.cil(0.5, 0.5, 0.03, 28), roxoEscuro));
@@ -372,6 +429,25 @@ function recursosDuende() {
   D.geoClava = G.torno([[0, 0], [0.035, 0], [0.04, 0.2], [0.075, 0.38], [0.1, 0.5], [0.085, 0.6], [0, 0.63]], 10);
   D.geoEspinho = G.cone(0.025, 0.08, 6);
   D.geoBarriga = G.esfera;
+  // túnica com a barra rasgada em pontas
+  D.geoTunica = (() => {
+    const g = new THREE.CylinderGeometry(0.24, 0.3, 0.32, 14, 2, true);
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      if (pos.getY(i) < -0.15) {
+        const a = Math.atan2(pos.getZ(i), pos.getX(i));
+        pos.setY(i, pos.getY(i) - Math.max(0, Math.sin(a * 7)) * 0.07);
+      }
+    }
+    g.computeVertexNormals();
+    return g;
+  })();
+  D.orelhaInterna = toon(0xc98a6a);
+  D.geoOrelhaInterna = (() => {
+    const g = new THREE.ConeGeometry(0.055, 0.3, 8);
+    g.translate(0, 0.17, 0.02);
+    return g;
+  })();
   D.geoOrelha = (() => {
     const g = new THREE.ConeGeometry(0.09, 0.42, 8);
     g.translate(0, 0.21, 0);
@@ -426,9 +502,7 @@ export function criarDuende(variante = 'normal') {
 
   // pernas curtas e pés grandes
   for (const x of [0.11, -0.11]) {
-    const p = grupo(x, 0.4, 0);
-    p.add(parte(G.capsula(0.055, 0.2), pele, { p: [0, -0.17, 0] }));
-    p.add(parte(G.esfera, d.pe, { p: [0, -0.34, 0.06], s: [0.09, 0.06, 0.16] }));
+    const p = perna(x, 0.4, 0.4, 0.055, pele, d.pe, 0.85, { descalco: true });
     corpo.add(p);
     if (x > 0) rig.pernaE = p;
     else rig.pernaD = p;
@@ -436,7 +510,7 @@ export function criarDuende(variante = 'normal') {
 
   // barriga redonda, túnica rasgada e cinto de corda
   corpo.add(parte(G.esfera, pele, { p: [0, 0.62, 0.02], s: [0.25, 0.27, 0.23] }));
-  corpo.add(parte(G.cil(0.24, 0.29, 0.3, 9), arqueiro ? d.tunicaArqueiro : d.tunica, { p: [0, 0.48, 0.01] }));
+  corpo.add(parte(d.geoTunica, toon(arqueiro ? 0x2e4a24 : 0x7a4f2a, { side: THREE.DoubleSide }), { p: [0, 0.48, 0.01] }));
   corpo.add(parte(G.toro(0.245, 0.025), d.cinto, { p: [0, 0.6, 0.01], r: [Math.PI / 2, 0, 0], contorno: false }));
 
   // cabeça grande: orelhas pontudas, nariz comprido, olhos amarelos e sorriso dentuço
@@ -445,8 +519,10 @@ export function criarDuende(variante = 'normal') {
   cabeca.add(parte(G.esfera, pele, { s: [R * 1.05, R * 0.92, R * 0.95] }));
   const orelhaE = parte(d.geoOrelha, pele, { p: [0.26, 0.04, -0.03], r: [0.25, 0, -1.25], s: [1, 1, 0.45] });
   const orelhaD = parte(d.geoOrelha, pele, { p: [-0.26, 0.04, -0.03], r: [0.25, 0, 1.25], s: [1, 1, 0.45] });
+  for (const o of [orelhaE, orelhaD]) o.add(parte(d.geoOrelhaInterna, d.orelhaInterna, { contorno: false, sombra: false }));
   cabeca.add(orelhaE, orelhaD);
   rig.orelhas = [orelhaE, orelhaD];
+  cabeca.add(parte(G.esferaB, toon(0x4f7f2c), { p: [0.05, 0.02, R * 0.95], s: 0.02, contorno: false, sombra: false }));
   const nariz = parte(d.geoNariz, pele, { p: [0, -0.02, R * 0.8], r: [0.35, 0, 0] });
   cabeca.add(nariz);
   cabeca.add(parte(G.esferaB, pele, { p: [0, -0.1, R * 0.8 + 0.2], s: 0.045 }));
@@ -472,6 +548,7 @@ export function criarDuende(variante = 'normal') {
   // braços finos, mãos grandes e clava com espinhos (ou arco)
   const be = braco(0.27, 0.78, 0.36, 0.045, pele, pele, 0.07);
   const bd = braco(-0.27, 0.78, 0.36, 0.045, pele, pele, 0.07);
+  be.pivo.add(parte(G.toro(0.05, 0.014), d.cinto, { p: [0, -0.1, 0], r: [Math.PI / 2, 0, 0], contorno: false }));
   if (arqueiro) {
     montarArco(rig, be.mao, d);
     // aljava nas costas com flechas
@@ -524,10 +601,10 @@ export function criarChefao() {
 
   // pernas grossas e pés enormes
   for (const x of [0.26, -0.26]) {
-    const p = grupo(x, 0.78, 0);
-    p.add(parte(G.capsula(0.17, 0.42), pele, { p: [0, -0.34, 0] }));
-    p.add(parte(G.esfera, peleEscura, { p: [0, -0.7, 0.08], s: [0.2, 0.12, 0.3] }));
-    p.add(parte(G.cil(0.2, 0.22, 0.14, 12), couro, { p: [0, -0.52, 0] }));
+    const p = perna(x, 0.78, 0.78, 0.17, pele, peleEscura, 1.8, { descalco: true });
+    // joelheira de ferro e faixa de couro na canela
+    p.userData.joelho.add(parte(new THREE.SphereGeometry(0.16, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), ferro, { p: [0, 0, 0.1], r: [Math.PI / 2, 0, 0], s: [1, 1, 0.6] }));
+    p.userData.joelho.add(parte(G.cil(0.17, 0.18, 0.14, 14), couro, { p: [0, -0.2, 0] }));
     corpo.add(p);
     if (x > 0) rig.pernaE = p;
     else rig.pernaD = p;
@@ -544,6 +621,13 @@ export function criarChefao() {
   caveira.add(parte(G.esferaB, matPreto, { p: [0.04, 0.01, 0.065], s: 0.025, contorno: false, sombra: false }));
   caveira.add(parte(G.esferaB, matPreto, { p: [-0.04, 0.01, 0.065], s: 0.025, contorno: false, sombra: false }));
   corpo.add(caveira);
+  // peitoral de ferro com rebites
+  const peitoral = new THREE.SphereGeometry(0.5, 24, 12, -Math.PI * 0.27 + Math.PI / 2, Math.PI * 0.54, Math.PI * 0.3, Math.PI * 0.32);
+  corpo.add(parte(peitoral, toon(0x5d636e, { emissive: 0x1a1d24, emissiveIntensity: 0.5, side: THREE.DoubleSide }), { p: [0, 1.72, 0.02], s: [1.1, 0.95, 0.98] }));
+  for (const a of [-0.6, -0.2, 0.2, 0.6]) {
+    corpo.add(parte(G.esferaB, osso, { p: [Math.sin(a) * 0.52, 1.88, Math.cos(a) * 0.43 + 0.02], s: 0.024, contorno: false, sombra: false }));
+  }
+
   // ombreiras de pele com espinhos de ferro
   for (const x of [0.55, -0.55]) {
     corpo.add(parte(G.esfera, pelo, { p: [x, 2.0, -0.02], s: [0.3, 0.2, 0.3] }));
@@ -629,6 +713,13 @@ export function animarRig(rig, dt, t, andar, ataque = -1) {
   rig.bracoE.rotation.set(-s * 0.6 * andar, 0, 0.08);
   rig.bracoD.rotation.set(s * 0.6 * andar, 0, -0.08);
   rig.corpo.position.y = Math.abs(Math.cos(rig.fase)) * 0.06 * andar + Math.sin(t * 2.2) * 0.012;
+  // joelhos dobram quando a perna vai para trás; cotovelos levemente flexionados
+  const joelhoE = rig.pernaE.userData.joelho, joelhoD = rig.pernaD.userData.joelho;
+  if (joelhoE) joelhoE.rotation.x = 0.04 + Math.max(0, Math.sin(rig.fase + 0.7)) * 1.1 * andar;
+  if (joelhoD) joelhoD.rotation.x = 0.04 + Math.max(0, -Math.sin(rig.fase + 0.7)) * 1.1 * andar;
+  const cotE = rig.bracoE.userData.cotovelo, cotD = rig.bracoD.userData.cotovelo;
+  if (cotE) cotE.rotation.x = -0.18 - 0.35 * andar;
+  if (cotD) cotD.rotation.x = -0.18 - 0.35 * andar;
   rig.corpo.rotation.set(andar * 0.08, 0, 0);
   if (rig.cabeca) rig.cabeca.rotation.set(Math.sin(t * 1.7) * 0.03, Math.sin(t * 0.9) * 0.06, 0);
 
@@ -668,6 +759,8 @@ export function animarRig(rig, dt, t, andar, ataque = -1) {
     rig.bracoE.rotation.z = 0.9 - b * 1.4;
     rig.corpo.rotation.y = Math.sin(p * Math.PI) * 0.45;
     rig.corpo.rotation.x = 0.2 * Math.sin(p * Math.PI);
+    if (cotE) cotE.rotation.x = -0.5 + a * 0.4;
+    if (cotD) cotD.rotation.x = -0.5 + b * 0.4;
   } else if (rig.tipo === 'maga') {
     // ergue o cajado e aponta para frente
     const a = Math.sin(p * Math.PI);
@@ -684,6 +777,8 @@ export function animarRig(rig, dt, t, andar, ataque = -1) {
     rig.bracoD.rotation.x = -1.45 * a;
     rig.bracoD.rotation.z = 0.55 * a;
     rig.corpo.rotation.y = -0.2 * a;
+    if (cotE) cotE.rotation.x = -0.18 * (1 - a);   // braço do arco esticado
+    if (cotD) cotD.rotation.x = -0.18 - 1.3 * a;   // mão da corda puxada até o rosto
     rig.flechaArco.visible = p < soltar && p > 0.1;
   } else if (rig.tipo === 'chefao' && rig.modo === 'pedra') {
     // SUPER do chefão: agacha, arranca uma pedra do chão, ergue e arremessa

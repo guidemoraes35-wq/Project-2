@@ -99,7 +99,8 @@ css/style.css     estilos (responsivo: celular em pé/deitado e computador)
 src/config.js     atributos, regras e fórmula de dano
 src/main.js       loop do jogo, jogador, duendes, combate, câmera, telas
 src/world.js      trilha, rio, floresta, lamparinas, clareira final, lua, colisões
-src/models.js     modelos cartoon (sombreado toon + contorno) e animações
+src/natureza.js   pinheiros, carvalhos, pedras, arbustos, grama ao vento, lamparinas e braseiros
+src/models.js     modelos cartoon (sombreado toon + contorno, joelhos e cotovelos articulados) e animações
 src/effects.js    partículas, rastro de golpe e números de dano
 src/input.js      joystick, botão de ataque, arrastar câmera e teclado
 vendor/           Three.js r170

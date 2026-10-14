@@ -2,6 +2,10 @@
 // Iluminada apenas pela lua, por lamparinas ao longo da trilha e pelos braseiros
 // da clareira final, onde espera o Chefão.
 import * as THREE from 'three';
+import {
+  geoCopaPinheiro, geoTronco, geoTroncoCarvalho, geoCopaCarvalho, geoPedra, geoArbusto,
+  geoTroncoCaido, geoTufoGrama, materialGrama, criarLamparina, criarBraseiro, geoMenir,
+} from './natureza.js';
 
 function criarAleatorio(semente) {
   let s = semente % 2147483647;
@@ -30,6 +34,24 @@ function texturaChao() {
     const r = 1 + rnd() * 6;
     ctx.beginPath();
     ctx.arc(rnd() * tam, rnd() * tam, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // fiapos de grama e musgo
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 1400; i++) {
+    const x = rnd() * tam, y = rnd() * tam;
+    ctx.strokeStyle = ['#2d4020', '#25381b', '#344a24', '#1f2f16'][Math.floor(rnd() * 4)];
+    ctx.lineWidth = 0.8 + rnd() * 0.8;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + (rnd() - 0.5) * 3, y - 2 - rnd() * 4);
+    ctx.stroke();
+  }
+  // pedrinhas
+  for (let i = 0; i < 120; i++) {
+    ctx.fillStyle = rnd() > 0.5 ? '#3a3a36' : '#2c2b28';
+    ctx.beginPath();
+    ctx.ellipse(rnd() * tam, rnd() * tam, 1 + rnd() * 2, 0.8 + rnd() * 1.4, rnd() * 3, 0, Math.PI * 2);
     ctx.fill();
   }
   // folhas secas
@@ -308,62 +330,50 @@ export function criarMundo(scene) {
 
   // ---------- Lamparinas ao longo da trilha e braseiros na clareira final ----------
   const fontesDeLuz = []; // { x, y, z, cor, base, fase, brilho }
-  const matPoste = new THREE.MeshStandardMaterial({ color: 0x1d1b1a, roughness: 0.6, metalness: 0.7 });
-  const matVidro = new THREE.MeshStandardMaterial({ color: 0xffc070, emissive: 0xffa040, emissiveIntensity: 2.5 });
-  const geoPoste = new THREE.CylinderGeometry(0.07, 0.1, 3.2, 6);
-  const geoBraco = new THREE.BoxGeometry(0.06, 0.06, 0.7);
-  const geoLanterna = new THREE.BoxGeometry(0.3, 0.42, 0.3);
-  const geoTampa = new THREE.ConeGeometry(0.28, 0.22, 4);
+  const matFerro = new THREE.MeshStandardMaterial({ color: 0x24211f, roughness: 0.55, metalness: 0.75 });
+  const matVidro = new THREE.MeshStandardMaterial({
+    color: 0xffc070, emissive: 0xffa040, emissiveIntensity: 2.5, transparent: true, opacity: 0.85, side: THREE.DoubleSide,
+  });
   const texBrilhoLamp = texturaBrilho('rgba(255,170,80,1)');
   const posLamparinas = [{ s: 7, lado: -1 }];
   for (let s = 26, lado = 1; s < L - 40; s += 25, lado = -lado) posLamparinas.push({ s, lado });
   for (const { s, lado } of posLamparinas) {
     const p = pontoNoCaminho(s, lado * 3.4);
-    const g = new THREE.Group();
+    const { grupo: g, luz } = criarLamparina(matFerro, matVidro);
     g.position.set(p.x, 0, p.z);
     // o braço da lamparina aponta para a trilha
     g.rotation.y = p.dir + (lado > 0 ? Math.PI / 2 : -Math.PI / 2);
-    const poste = new THREE.Mesh(geoPoste, matPoste);
-    poste.position.y = 1.6;
-    poste.castShadow = true;
-    const braco = new THREE.Mesh(geoBraco, matPoste);
-    braco.position.set(0, 3.05, 0.3);
-    const lanterna = new THREE.Mesh(geoLanterna, matVidro);
-    lanterna.position.set(0, 2.75, 0.6);
-    const tampa = new THREE.Mesh(geoTampa, matPoste);
-    tampa.position.set(0, 3.07, 0.6);
-    tampa.rotation.y = Math.PI / 4;
     const brilho = new THREE.Sprite(new THREE.SpriteMaterial({
       map: texBrilhoLamp, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.8,
     }));
-    brilho.scale.setScalar(2.2);
-    brilho.position.copy(lanterna.position);
-    g.add(poste, braco, lanterna, tampa, brilho);
+    brilho.scale.setScalar(2.0);
+    brilho.position.copy(luz);
+    g.add(brilho);
     scene.add(g);
     g.updateMatrixWorld();
-    const pl = new THREE.Vector3(0, 2.6, 0.6).applyMatrix4(g.matrixWorld);
+    const pl = luz.clone().applyMatrix4(g.matrixWorld);
     fontesDeLuz.push({ x: pl.x, y: pl.y, z: pl.z, cor: 0xff9a45, base: 22, dist: 18, fase: rnd() * 100, brilho });
     addObstaculo(p.x, p.z, 0.35);
   }
 
-  // clareira final: círculo de pedras antigas e dois braseiros
+  // clareira final: círculo de menires com runas e dois braseiros
   const fimTrilha = pontoNoCaminho(L - 9);
-  const matPedra = new THREE.MeshStandardMaterial({ color: 0x4a4f58, roughness: 0.95, flatShading: true });
-  const matRuna = new THREE.MeshStandardMaterial({ color: 0x223322, emissive: 0x3cff6a, emissiveIntensity: 1.2 });
-  const geoMenir = new THREE.BoxGeometry(1.1, 3.2, 0.7, 1, 2, 1);
+  const matPedra = new THREE.MeshStandardMaterial({ color: 0x5c616b, roughness: 0.95, flatShading: true, vertexColors: true });
+  const matRuna = new THREE.MeshStandardMaterial({ color: 0x223322, emissive: 0x3cff6a, emissiveIntensity: 1.2, transparent: true });
+  const geosMenir = [geoMenir(1), geoMenir(4), geoMenir(9)];
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * Math.PI * 2 + fimTrilha.dir;
     // deixa a entrada (de onde vem a trilha) livre
     if (Math.abs(Math.sin((a - fimTrilha.dir - Math.PI) / 2)) < 0.25) continue;
     const x = fimTrilha.x + Math.sin(a) * 12.5, z = fimTrilha.z + Math.cos(a) * 12.5;
-    const menir = new THREE.Mesh(geoMenir, matPedra);
-    menir.position.set(x, 1.4, z);
-    menir.rotation.set((rnd() - 0.5) * 0.15, a, (rnd() - 0.5) * 0.2);
-    menir.scale.y = 0.8 + rnd() * 0.5;
+    const menir = new THREE.Mesh(geosMenir[i % 3], matPedra);
+    menir.position.set(x, -0.1, z);
+    menir.rotation.set((rnd() - 0.5) * 0.12, a, (rnd() - 0.5) * 0.16);
+    menir.scale.setScalar(0.85 + rnd() * 0.35);
     menir.castShadow = true;
     menir.receiveShadow = true;
-    const runa = new THREE.Mesh(new THREE.PlaneGeometry(0.35, 0.6), matRuna);
-    runa.position.set(0, 0.3, -0.36);
+    const runa = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.55), matRuna);
+    runa.position.set(0, 1.7, -0.4);
     runa.rotation.y = Math.PI;
     menir.add(runa);
     scene.add(menir);
@@ -374,17 +384,12 @@ export function criarMundo(scene) {
   });
   for (const lado of [-1, 1]) {
     const p = pontoNoCaminho(L - 9, lado * 6.5);
-    const g = new THREE.Group();
+    const g = criarBraseiro(matFerro);
     g.position.set(p.x, 0, p.z);
-    const pe = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.3, 1.1, 8), matPoste);
-    pe.position.y = 0.55;
-    const bacia = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.3, 0.35, 10), matPoste);
-    bacia.position.y = 1.25;
     const fogo = new THREE.Sprite(matFogo.clone());
     fogo.scale.set(1.4, 1.9, 1);
     fogo.position.y = 1.85;
-    pe.castShadow = bacia.castShadow = true;
-    g.add(pe, bacia, fogo);
+    g.add(fogo);
     scene.add(g);
     fontesDeLuz.push({ x: p.x, y: 2.2, z: p.z, cor: 0xff7a2a, base: 40, dist: 22, fase: rnd() * 100, brilho: fogo, fogo: true });
     addObstaculo(p.x, p.z, 0.6);
@@ -398,91 +403,180 @@ export function criarMundo(scene) {
     luzes.push(l);
   }
 
-  // ---------- Árvores ----------
-  const arvores = [];
-  function tentarArvores(qtd, aceita, espaco) {
-    let n = 0;
-    for (let k = 0; k < qtd * 12 && n < qtd; k++) {
-      const x = minX + rnd() * largX, z = minZ + rnd() * largZ;
-      const q = consultar(x, z);
-      if (!aceita(q)) continue;
-      const s = 0.75 + rnd() * 0.75;
-      if (!livreDeObstaculos(x, z, espaco * s)) continue;
-      arvores.push({ x, z, s });
-      addObstaculo(x, z, 0.42 * s);
-      n++;
-    }
-  }
-  // dentro da área andável, fora da trilha (a clareira final fica mais aberta)
-  tentarArvores(150, (q) => q.e < -1.6 && q.d > 4 && !(q.s > L - 34 && q.d < 15), 2.6);
-  // floresta fechada do outro lado do rio
-  tentarArvores(1000, (q) => q.e > LARGURA_RIO + 1.2 && q.e < LARGURA_RIO + 26, 1.6);
-
-  const geoTronco = new THREE.CylinderGeometry(0.22, 0.38, 3, 7).translate(0, 1.5, 0);
-  const geoCopa = [
-    new THREE.ConeGeometry(2.0, 3.0, 8).translate(0, 3.6, 0),
-    new THREE.ConeGeometry(1.6, 2.6, 8).translate(0, 5.0, 0),
-    new THREE.ConeGeometry(1.1, 2.2, 8).translate(0, 6.3, 0),
-  ];
-  const matTronco = new THREE.MeshStandardMaterial({ color: 0x2b1d12, roughness: 1, flatShading: true });
-  const matCopa = new THREE.MeshStandardMaterial({ color: 0x14301f, roughness: 0.95, flatShading: true });
-  // agrupa em blocos para que os fora da tela não sejam desenhados
-  const blocos = new Map();
-  for (const t of arvores) {
-    const k = `${Math.floor(t.x / 45)},${Math.floor(t.z / 45)}`;
-    if (!blocos.has(k)) blocos.set(k, []);
-    blocos.get(k).push(t);
-  }
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const eixoY = new THREE.Vector3(0, 1, 0);
   const cor = new THREE.Color();
-  for (const lista of blocos.values()) {
-    const troncos = new THREE.InstancedMesh(geoTronco, matTronco, lista.length);
-    const copas = geoCopa.map((g) => new THREE.InstancedMesh(g, matCopa, lista.length));
-    lista.forEach((t, i) => {
-      const y = consultar(t.x, t.z).e > 0 ? 0.3 : 0;
-      q.setFromAxisAngle(eixoY, rnd() * Math.PI * 2);
-      m.compose(new THREE.Vector3(t.x, y, t.z), q, new THREE.Vector3(t.s, t.s * (0.9 + rnd() * 0.4), t.s));
-      troncos.setMatrixAt(i, m);
-      cor.setHSL(0.36 + rnd() * 0.08, 0.35 + rnd() * 0.2, 0.55 + rnd() * 0.5);
-      for (const c of copas) {
-        c.setMatrixAt(i, m);
-        c.setColorAt(i, cor);
+  const v3 = new THREE.Vector3();
+  const escala = new THREE.Vector3();
+
+  /** Agrupa itens em blocos de 45 m para que os fora da tela não sejam desenhados. */
+  function porBloco(itens) {
+    const blocos = new Map();
+    for (const t of itens) {
+      const k = `${Math.floor(t.x / 45)},${Math.floor(t.z / 45)}`;
+      if (!blocos.has(k)) blocos.set(k, []);
+      blocos.get(k).push(t);
+    }
+    return [...blocos.values()];
+  }
+
+  /** Cria malhas instanciadas por bloco. `preencher(item, i, malhas)` posiciona cada instância. */
+  function instanciar(itens, pares, preencher, { sombra = true, recebe = true } = {}) {
+    for (const lista of porBloco(itens)) {
+      const malhas = pares.map(([geo, mat]) => new THREE.InstancedMesh(geo, mat, lista.length));
+      lista.forEach((t, i) => preencher(t, i, malhas));
+      for (const im of malhas) {
+        im.castShadow = sombra;
+        im.receiveShadow = recebe;
+        im.instanceMatrix.needsUpdate = true;
+        if (im.instanceColor) im.instanceColor.needsUpdate = true;
+        im.computeBoundingSphere();
+        scene.add(im);
       }
-    });
-    for (const im of [troncos, ...copas]) {
-      im.castShadow = true;
-      im.receiveShadow = true;
-      im.computeBoundingSphere();
-      scene.add(im);
     }
   }
 
-  // ---------- Pedras ----------
+  // ---------- Árvores: pinheiros e carvalhos retorcidos ----------
+  const arvores = [];
+  function tentarArvores(qtd, aceita, espaco, chanceCarvalho) {
+    let n = 0;
+    for (let k = 0; k < qtd * 12 && n < qtd; k++) {
+      const x = minX + rnd() * largX, z = minZ + rnd() * largZ;
+      const qq = consultar(x, z);
+      if (!aceita(qq)) continue;
+      const s = 0.75 + rnd() * 0.75;
+      const carvalho = rnd() < chanceCarvalho;
+      if (!livreDeObstaculos(x, z, espaco * s * (carvalho ? 1.2 : 1))) continue;
+      arvores.push({ x, z, s, carvalho, y: qq.e > 0 ? 0.3 : 0 });
+      addObstaculo(x, z, (carvalho ? 0.5 : 0.42) * s);
+      n++;
+    }
+  }
+  // dentro da área andável, fora da trilha (a clareira final fica mais aberta)
+  tentarArvores(150, (qq) => qq.e < -1.6 && qq.d > 4 && !(qq.s > L - 34 && qq.d < 15), 2.6, 0.3);
+  // floresta fechada do outro lado do rio
+  tentarArvores(1000, (qq) => qq.e > LARGURA_RIO + 1.2 && qq.e < LARGURA_RIO + 26, 1.6, 0.15);
+
+  const matCasca = new THREE.MeshStandardMaterial({ color: 0x3a2818, roughness: 1, vertexColors: true });
+  const matPinheiro = new THREE.MeshStandardMaterial({ color: 0x1c4a2c, roughness: 0.9, vertexColors: true, side: THREE.DoubleSide });
+  const matCarvalho = new THREE.MeshStandardMaterial({ color: 0x2a4a22, roughness: 0.9, vertexColors: true });
+  const geoTroncoPinheiro = geoTronco(3.2, 0.26, 2);
+  const geoPinheiro = geoCopaPinheiro(1);
+  const geoTroncoCarv = geoTroncoCarvalho(3);
+  const geoCopaCarv = geoCopaCarvalho(3);
+  const pinheiros = arvores.filter((t) => !t.carvalho);
+  const carvalhos = arvores.filter((t) => t.carvalho);
+  instanciar(pinheiros, [[geoTroncoPinheiro, matCasca], [geoPinheiro, matPinheiro]], (t, i, [tronco, copa]) => {
+    q.setFromAxisAngle(eixoY, rnd() * Math.PI * 2);
+    m.compose(v3.set(t.x, t.y, t.z), q, escala.set(t.s, t.s * (0.85 + rnd() * 0.4), t.s));
+    tronco.setMatrixAt(i, m);
+    copa.setMatrixAt(i, m);
+    cor.setHSL(0.36 + rnd() * 0.07, 0.4 + rnd() * 0.2, 0.5 + rnd() * 0.25);
+    copa.setColorAt(i, cor);
+  });
+  instanciar(carvalhos, [[geoTroncoCarv, matCasca], [geoCopaCarv, matCarvalho]], (t, i, [tronco, copa]) => {
+    q.setFromAxisAngle(eixoY, rnd() * Math.PI * 2);
+    m.compose(v3.set(t.x, t.y, t.z), q, escala.set(t.s, t.s * (0.9 + rnd() * 0.25), t.s));
+    tronco.setMatrixAt(i, m);
+    copa.setMatrixAt(i, m);
+    // carvalhos com folhas um pouco mais amareladas ou avermelhadas (outono)
+    cor.setHSL(0.18 + rnd() * 0.14, 0.45 + rnd() * 0.2, 0.42 + rnd() * 0.2);
+    copa.setColorAt(i, cor);
+  });
+
+  // ---------- Pedras com musgo ----------
   const pedrasLista = [];
-  for (let k = 0; k < 400 && pedrasLista.length < 50; k++) {
+  for (let k = 0; k < 400 && pedrasLista.length < 55; k++) {
     const p = pontoNoCaminho(rnd() * L, (rnd() * 2 - 1) * (LARGURA - 1.5));
     const qq = consultar(p.x, p.z);
     if (qq.d < 3.5 || qq.e > -1) continue;
-    const s = 0.5 + rnd() * 1.1;
-    if (!livreDeObstaculos(p.x, p.z, 0.7 * s + 0.4)) continue;
-    pedrasLista.push({ x: p.x, z: p.z, s });
-    addObstaculo(p.x, p.z, 0.5 * s);
+    const s = 0.4 + rnd() * 0.9;
+    if (!livreDeObstaculos(p.x, p.z, 0.8 * s + 0.4)) continue;
+    pedrasLista.push({ x: p.x, z: p.z, s, v: k % 2 });
+    addObstaculo(p.x, p.z, 0.75 * s);
   }
-  const pedras = new THREE.InstancedMesh(
-    new THREE.DodecahedronGeometry(0.6, 0),
-    new THREE.MeshStandardMaterial({ color: 0x3a3d44, roughness: 0.9, flatShading: true }),
-    pedrasLista.length
-  );
-  pedrasLista.forEach((p, i) => {
-    q.setFromEuler(new THREE.Euler(rnd(), rnd() * 6, rnd()));
-    m.compose(new THREE.Vector3(p.x, 0.15 * p.s, p.z), q, new THREE.Vector3(p.s, p.s * 0.7, p.s));
-    pedras.setMatrixAt(i, m);
+  const matRocha = new THREE.MeshStandardMaterial({ color: 0x51565e, roughness: 0.95, flatShading: true, vertexColors: true });
+  const matSeixo = new THREE.MeshStandardMaterial({ color: 0x3a3c40, roughness: 1, flatShading: true, vertexColors: true });
+  const geosPedra = [geoPedra(1), geoPedra(7)];
+  for (const v of [0, 1]) {
+    instanciar(pedrasLista.filter((p) => p.v === v), [[geosPedra[v], matRocha]], (p, i, [im]) => {
+      q.setFromEuler(new THREE.Euler(0, rnd() * 6, 0));
+      m.compose(v3.set(p.x, 0, p.z), q, escala.set(p.s * (0.9 + rnd() * 0.3), p.s, p.s * (0.9 + rnd() * 0.3)));
+      im.setMatrixAt(i, m);
+    });
+  }
+
+  // seixos ao longo das bordas da trilha
+  const seixos = [];
+  for (let s = 2; s < L - 30; s += 0.9) {
+    for (const lado of [-1, 1]) {
+      if (rnd() < 0.35) continue;
+      const lat = lado * (LARGURA_TRILHA + Math.sin(s * 0.21) * 0.35 + 0.5 + rnd() * 0.7);
+      const p = pontoNoCaminho(s + rnd() * 0.6, lat);
+      seixos.push({ x: p.x, z: p.z, s: 0.1 + rnd() * 0.16 });
+    }
+  }
+  instanciar(seixos, [[geosPedra[0], matSeixo]], (p, i, [im]) => {
+    q.setFromEuler(new THREE.Euler(0, rnd() * 6, 0));
+    m.compose(v3.set(p.x, -0.02, p.z), q, escala.set(p.s * 1.3, p.s, p.s));
+    im.setMatrixAt(i, m);
+  }, { sombra: false });
+
+  // ---------- Troncos caídos ----------
+  const matTroncoCaido = new THREE.MeshStandardMaterial({ color: 0x4a3420, roughness: 1, vertexColors: true });
+  const geoCaido = geoTroncoCaido(2);
+  const troncosCaidos = [];
+  for (let k = 0; k < 300 && troncosCaidos.length < 12; k++) {
+    const p = pontoNoCaminho(20 + rnd() * (L - 60), (rnd() < 0.5 ? -1 : 1) * (4.5 + rnd() * 3.5));
+    const ang = rnd() * Math.PI;
+    const dx = Math.cos(ang) * 1.3, dz = -Math.sin(ang) * 1.3;
+    const pontos = [[p.x, p.z], [p.x + dx, p.z + dz], [p.x - dx, p.z - dz]];
+    if (!pontos.every(([x, z]) => consultar(x, z).e < -1 && consultar(x, z).d > 3.6 && livreDeObstaculos(x, z, 0.5))) continue;
+    troncosCaidos.push({ x: p.x, z: p.z, ang });
+    for (const [x, z] of pontos) addObstaculo(x, z, 0.42);
+  }
+  instanciar(troncosCaidos, [[geoCaido, matTroncoCaido]], (t, i, [im]) => {
+    q.setFromAxisAngle(eixoY, t.ang);
+    m.compose(v3.set(t.x, 0, t.z), q, escala.set(1, 1, 1));
+    im.setMatrixAt(i, m);
   });
-  pedras.castShadow = true;
-  pedras.receiveShadow = true;
-  scene.add(pedras);
+
+  // ---------- Arbustos ----------
+  const matArbusto = new THREE.MeshStandardMaterial({ color: 0x24502a, roughness: 0.9, vertexColors: true });
+  const geoArb = geoArbusto(5);
+  const arbustos = [];
+  for (let k = 0; k < 3000 && arbustos.length < 160; k++) {
+    const p = pontoNoCaminho(rnd() * L, (rnd() * 2 - 1) * (LARGURA + 1));
+    const qq = consultar(p.x, p.z);
+    if (qq.d < 3.8 || qq.e > -0.8 || !livreDeObstaculos(p.x, p.z, 0.6)) continue;
+    arbustos.push({ x: p.x, z: p.z, s: 0.6 + rnd() * 0.7 });
+  }
+  instanciar(arbustos, [[geoArb, matArbusto]], (b, i, [im]) => {
+    q.setFromAxisAngle(eixoY, rnd() * 6);
+    m.compose(v3.set(b.x, 0, b.z), q, escala.set(b.s, b.s * (0.8 + rnd() * 0.3), b.s));
+    im.setMatrixAt(i, m);
+    cor.setHSL(0.3 + rnd() * 0.08, 0.4, 0.45 + rnd() * 0.2);
+    im.setColorAt(i, cor);
+  });
+
+  // ---------- Grama (balança com o vento) ----------
+  const matGrama = materialGrama();
+  const geoGrama = geoTufoGrama();
+  const tufos = [];
+  for (let k = 0; k < 20000 && tufos.length < 5200; k++) {
+    const p = pontoNoCaminho(rnd() * L, (rnd() * 2 - 1) * (LARGURA_ARENA));
+    const qq = consultar(p.x, p.z);
+    if (qq.e > -0.5 || qq.d < LARGURA_TRILHA + 0.4 + rnd() * 0.8) continue;
+    tufos.push({ x: p.x, z: p.z, s: 0.7 + rnd() * 0.8 });
+  }
+  instanciar(tufos, [[geoGrama, matGrama]], (t, i, [im]) => {
+    q.setFromAxisAngle(eixoY, rnd() * 6);
+    m.compose(v3.set(t.x, 0, t.z), q, escala.set(t.s, t.s * (0.8 + rnd() * 0.5), t.s));
+    im.setMatrixAt(i, m);
+    cor.setHSL(0.24 + rnd() * 0.08, 0.45, 0.5 + rnd() * 0.25);
+    im.setColorAt(i, cor);
+  }, { sombra: false });
 
   // ---------- Juncos nas margens do rio ----------
   const juncos = [];
@@ -560,6 +654,7 @@ export function criarMundo(scene) {
     luzLua.position.copy(foco).add(offsetLua);
     luzLua.target.position.copy(foco);
     ceu.position.copy(camera.position);
+    matGrama.userData.tempo.value = t;
     ondas.offset.x += dt * 0.012;
     ondas.offset.y += dt * 0.02;
 
