@@ -135,26 +135,31 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .chefao {
   position: absolute;
   left: 50%;
-  top: calc(12px + var(--sat));
+  top: calc(8px + var(--sat));
   transform: translateX(-50%);
-  width: min(420px, 34vw);
+  width: min(240px, 60vw);
   text-align: center;
+  line-height: 1;
 }
 .chefao-nome {
   font-family: var(--fonte-titulo);
-  font-size: 15px;
+  font-size: 12px;
   color: #b8f07a;
-  text-shadow: 0 2px 3px #000;
+  text-shadow: 0 1px 2px #000;
 }
 .chefao-barra {
-  height: 14px;
+  height: 7px;
   margin-top: 3px;
   background: #1a0808;
-  border: 2px solid #2c1a10;
+  border: 1px solid #2c1a10;
   outline: 1px solid var(--borda);
-  border-radius: 8px;
+  border-radius: 4px;
   overflow: hidden;
 }
+/* com o chefão em campo, os painéis descem para dar lugar à barra dele no topo */
+.hud-jogador, .hud-duendes { transition: top 0.3s ease-out; }
+#hud.com-chefao .hud-jogador,
+#hud.com-chefao .hud-duendes { top: calc(40px + var(--sat)); }
 #boss-fill {
   height: 100%;
   width: 100%;
@@ -360,14 +365,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .tela-fim h1.derrota { color: #e0483a; }
 .tela-fim p { font-size: 18px; color: var(--texto); max-width: 480px; }
 .botoes { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
-
-/* Telas menores: a barra do chefão desce para baixo dos painéis */
-@media (max-width: 999px) {
-  .chefao { top: calc(88px + var(--sat)); width: min(420px, 60vw); }
-}
-@media (max-width: 700px) and (min-height: 501px) {
-  .chefao { top: calc(132px + var(--sat)); width: calc(100vw - 32px); }
-}
 
 /* Celular em pé: cartas mais compactas */
 @media (max-width: 560px) {

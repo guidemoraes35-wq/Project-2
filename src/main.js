@@ -195,6 +195,7 @@ function iniciarJogo(id) {
   timerFim = -1;
   tremor = 0;
   $('boss-bar').classList.add('hidden');
+  hud.classList.remove('com-chefao');
   cam.yaw = 0;
   cam.pitch = 0.42;
 
@@ -349,6 +350,7 @@ function surgirChefao() {
   tremor = 0.6;
   $('boss-name').textContent = CHEFAO.nome;
   $('boss-bar').classList.remove('hidden');
+  hud.classList.add('com-chefao');
   atualizarHUD();
   mostrarAviso(`O ${CHEFAO.nome} apareceu!`);
 }
